@@ -39,6 +39,20 @@ package WREB_v4_commands_package is
 
   constant read_v_ok_cmd : std_logic_vector(23 downto 0) := x"000100";
 
+  constant sync_cmd_delay_cmd : std_logic_vector(23 downto 0) := x"000015";
+  constant sync_cmd_mask_cmd  : std_logic_vector(23 downto 0) := x"000016";
+
+  constant interrupt_mask_cmd : std_logic_vector(23 downto 0) := x"000017";
+
+    -- Bitstream Remote Update
+  constant ru_start_cmd              : std_logic_vector(23 downto 0) := x"000100";
+  constant ru_bitstream_we_cmd       : std_logic_vector(23 downto 0) := x"000101";
+  constant ru_bitstream_daq_done_cmd : std_logic_vector(23 downto 0) := x"000102";
+  constant ru_status_read_cmd        : std_logic_vector(23 downto 0) := x"000103";
+
+  -- multiboot
+  constant start_multiboot_cmd : std_logic_vector(23 downto 0) := x"000200";
+
 -- Image parameters
   constant image_size_cmd        : std_logic_vector(23 downto 0) := x"400005";
   constant image_patter_mode_cmd : std_logic_vector(23 downto 0) := x"400006";
@@ -87,8 +101,9 @@ package WREB_v4_commands_package is
 
 ---------- CABAC bias DAC
   constant c_bias_load_config_cmd : std_logic_vector(23 downto 0) := x"400100";
-  constant c_bias_ldac_cmd   : std_logic_vector(23 downto 0) := x"400101";
+  constant c_bias_ldac_cmd        : std_logic_vector(23 downto 0) := x"400101";
   constant c_bias_ldac_ccd2_cmd   : std_logic_vector(23 downto 0) := x"400102";
+  constant c_bias_err_vut_cmd       : std_logic_vector(23 downto 0) := x"40010F";
 
 ---------- DREB voltage and current sensors
   constant V_DREB_voltage_cmd  : std_logic_vector(23 downto 0) := x"600000";
@@ -189,9 +204,6 @@ package WREB_v4_commands_package is
 
 -- back bias switch 
   constant back_bias_sw_cmd : std_logic_vector(23 downto 0) := x"D00000";
-
-  -- multiboot
-  constant start_multiboot_cmd : std_logic_vector(23 downto 0) := x"F00000";
 
 end WREB_v4_commands_package;
 

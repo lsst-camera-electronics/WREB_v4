@@ -19,6 +19,7 @@
 ----------------------------------------------------------------------------------
 library IEEE;
 use IEEE.STD_LOGIC_1164.all;
+use ieee.std_logic_misc.all;            -- for or_reduce
 use work.max_11046_top_package.all;
 use work.dual_ads1118_top_package.all;
 
@@ -149,6 +150,14 @@ entity WREB_v4 is
     ck_adc_SHDN                : out   std_logic;
     ccd1_adc_SHDN              : out   std_logic;
 
+    ------ Remote Update ------
+    ru_outSpiCsB   : out std_logic;
+    ru_outSpiMosi  : out std_logic;
+    ru_inSpiMiso   : in  std_logic;
+    ru_outSpiWpB   : out std_logic;     -- SPI flash write protect
+    ru_outSpiHoldB : out std_logic;
+
+
     ------ MISC ------
 -- Resistors
     r_add : in std_logic_vector(7 downto 0);
@@ -169,13 +178,16 @@ entity WREB_v4 is
     ASPIC_5V_sd_ccd1  : out std_logic;
 
 
-    -- GPIO
+    -- GPIO power cable
     gpio_0_p   : out std_logic;
     gpio_0_n   : out std_logic;
     gpio_0_dir : out std_logic;
     gpio_1_p   : out std_logic;
     gpio_1_n   : out std_logic;
     gpio_1_dir : out std_logic;
+
+    -- GPIO silver cable
+    gpio_2 : out std_logic;
 
 -- DREB serial number
     reb_sn_onewire : inout std_logic
@@ -187,20 +199,26 @@ end WREB_v4;
 architecture Behavioral of WREB_v4 is
 
 
- component LsstSci is
+
+
+  component LsstSci is
     port (
 
       -------------------------------------------------------------------------
       -- FPGA Interface
       -------------------------------------------------------------------------
+
+
+      StableClk : in std_logic;
+      StableRst : in std_logic;
+
       FpgaRstL : in std_logic;
 
-      PgpClkP : in  std_logic;
-      PgpClkM : in  std_logic;
-      PgpRxP  : in  std_logic;
-      PgpRxM  : in  std_logic;
-      PgpTxP  : out std_logic;
-      PgpTxM  : out std_logic;
+      PgpRefClk : in  std_logic;
+      PgpRxP    : in  std_logic;
+      PgpRxM    : in  std_logic;
+      PgpTxP    : out std_logic;
+      PgpTxM    : out std_logic;
 
       -------------------------------------------------------------------------
       -- Clock/Reset Generator Interface
@@ -234,7 +252,8 @@ architecture Behavioral of WREB_v4 is
       -- Notification Interface
       -------------------------------------------------------------------------
       NoticeEn : in std_logic;
-      Notice   : in std_logic_vector(31 downto 0);
+      -- Notice   : in std_logic_vector(13 downto 0);
+      Notice   : in std_logic_vector(15 downto 0);
 
       -------------------------------------------------------------------------
       -- Synchronous Command Interface
@@ -245,20 +264,22 @@ architecture Behavioral of WREB_v4 is
       -------------------------------------------------------------------------
       -- Status Block Interface
       -------------------------------------------------------------------------
-      StatusRst  : in  std_logic;
       StatusAddr : in  std_logic_vector(23 downto 0);
       StatusReg  : out std_logic_vector(31 downto 0);
+      StatusRst  : in  std_logic;
 
       -------------------------------------------------------------------------
       -- Debug Interface
       -------------------------------------------------------------------------
       PgpLocLinkReadyOut : out std_logic;
-      PgpRemLinkReadyOut : out std_logic
+      PgpRemLinkReadyOut : out std_logic;
+      PgpRxPhyReadyOut   : out std_logic;
+      PgpTxPhyReadyOut   : out std_logic
       );
 
   end component;
 
- 
+
   component wreb_v4_cmd_interpeter
     port (
       reset : in std_logic;
@@ -297,6 +318,17 @@ architecture Behavioral of WREB_v4 is
       Mgt_avtt_ok   : in std_logic;
       V3_3v_ok      : in std_logic;
       Switch_addr   : in std_logic_vector(7 downto 0);
+
+      -- sync commands
+      sync_cmd_delay_en   : out std_logic;
+      sync_cmd_delay_read : in  std_logic_vector(7 downto 0);
+      sync_cmd_mask_en    : out std_logic;
+      sync_cmd_mask_read  : in  std_logic_vector(31 downto 0);
+
+-- interrupt commands
+      interrupt_mask_wr_en : out std_logic;
+      interrupt_mask_read  : in  std_logic_vector(13 downto 0);
+
 
 -- Image parameters
       image_size        : in  std_logic_vector(31 downto 0);  -- this register contains the image size
@@ -350,9 +382,11 @@ architecture Behavioral of WREB_v4 is
       clk_rail_load_start : out std_logic;
       clk_rail_ldac_start : out std_logic;
 
--- BIAS DAC (former CABAC bias DAC)               
-      c_bias_load_start : out std_logic;
-      c_bias_ldac_start : out std_logic;
+-- BIAS DAC (former CABAC bias DAC)
+      c_bias_dac_cmd_err : in  std_logic_vector(2 downto 0);
+      c_bias_v_undr_th   : in  std_logic_vector(2 downto 0);
+      c_bias_load_start  : out std_logic;
+      c_bias_ldac_start  : out std_logic;
 
 -- DREB voltage and current sensors
       error_V_HTR_voltage   : in std_logic;
@@ -458,12 +492,21 @@ architecture Behavioral of WREB_v4 is
       CABAC_reg_en : out std_logic;
 
 -- back bias switch
-      back_bias_sw_rb : in  std_logic;
-      back_bias_cl_rb : in  std_logic;
-      en_back_bias_sw : out std_logic;
+      back_bias_sw_rb    : in  std_logic;
+      back_bias_cl_rb    : in  std_logic;
+      back_bias_sw_error : in  std_logic;
+      en_back_bias_sw    : out std_logic;
 
 -- multiboot
-        start_multiboot : out std_logic
+      start_multiboot : out std_logic;
+
+-- remote update
+          remote_update_fifo_full     : in  std_logic;
+          remote_update_status_reg    : in  std_logic_vector(15 downto 0);
+          remote_update_reboot_status : in  std_logic_vector(31 downto 0);
+          start_remote_update         : out std_logic;
+          remote_update_bitstrm_we    : out std_logic;
+          remote_update_daq_done      : out std_logic
 
       );    
   end component;
@@ -492,6 +535,36 @@ architecture Behavioral of WREB_v4 is
       trig_tm_value_adc  : out std_logic_vector(63 downto 0)
       );
   end component;
+
+  component sync_cmd_decoder_top
+    port (
+      pgp_clk      : in  std_logic;
+      pgp_reset    : in  std_logic;
+      clk          : in  std_logic;
+      reset        : in  std_logic;
+      sync_cmd_en  : in  std_logic;
+      delay_en     : in  std_logic;
+      delay_in     : in  std_logic_vector(7 downto 0);
+      delay_read   : out std_logic_vector(7 downto 0);
+      sync_cmd     : in  std_logic_vector(7 downto 0);
+      sync_cmd_out : out std_logic_vector(7 downto 0));
+  end component;
+
+
+  component REB_interrupt_top
+    generic (
+      edge_en : std_logic_vector(13 downto 0));
+    port (
+      clk               : in  std_logic;
+      reset             : in  std_logic;
+      interrupt_bus_in  : in  std_logic_vector(13 downto 0);
+      mask_bus_in_en    : in  std_logic;
+      mask_bus_in       : in  std_logic_vector(13 downto 0);
+      mask_bus_out      : out std_logic_vector(13 downto 0);
+      interrupt_en_out  : out std_logic;
+      interrupt_bus_out : out std_logic_vector(13 downto 0));
+  end component;
+
 
   component sequencer_v3_top is
     port (
@@ -602,17 +675,33 @@ architecture Behavioral of WREB_v4 is
       );
   end component;
 
-  component ad53xx_DAC_top
+  --component ad53xx_DAC_top
+  --  port (
+  --    clk         : in  std_logic;
+  --    reset       : in  std_logic;
+  --    start_write : in  std_logic;
+  --    start_ldac  : in  std_logic;
+  --    d_to_slave  : in  std_logic_vector(15 downto 0);
+  --    mosi        : out std_logic;
+  --    ss          : out std_logic;
+  --    sclk        : out std_logic;
+  --    ldac        : out std_logic);
+  --end component;
+
+  component ad53xx_DAC_protection_top
     port (
-      clk         : in  std_logic;
-      reset       : in  std_logic;
-      start_write : in  std_logic;
-      start_ldac  : in  std_logic;
-      d_to_slave  : in  std_logic_vector(15 downto 0);
-      mosi        : out std_logic;
-      ss          : out std_logic;
-      sclk        : out std_logic;
-      ldac        : out std_logic);
+      clk             : in  std_logic;
+      reset           : in  std_logic;
+      start_write     : in  std_logic;
+      start_ldac      : in  std_logic;
+      bbs_switch_on   : in  std_logic;
+      d_to_slave      : in  std_logic_vector(15 downto 0);
+      command_error   : out std_logic_vector(2 downto 0);
+      values_under_th : out std_logic_vector(2 downto 0);
+      mosi            : out std_logic;
+      ss              : out std_logic;
+      sclk            : out std_logic;
+      ldac            : out std_logic);
   end component;
 
   component dual_ad53xx_DAC_top is
@@ -808,11 +897,36 @@ architecture Behavioral of WREB_v4 is
       ); 
   end component;
 
-  component multiboot_fsm is
+  --component multiboot_fsm is
+  --  port (
+  --    TRIGGER : in std_logic;
+  --    SYSCLK  : in std_logic
+  --    );
+  --end component;
+
+  component multiboot_top
     port (
-      TRIGGER : in std_logic;
-      SYSCLK  : in std_logic
-      );
+      inBitstreamClk       : in  std_logic;
+      inSpiClk             : in  std_logic;
+      inReset_EnableB      : in  std_logic;
+      inCheckIdOnly        : in  std_logic;
+      inVerifyOnly         : in  std_logic;
+      inStartProg          : in  std_logic;
+      inDaqDone            : in  std_logic;
+      inStartReboot        : in  std_logic;
+      inImageSelWe         : in  std_logic;
+      inImageSel           : in  std_logic_vector(1 downto 0);
+      inBitstreamWe        : in  std_logic;
+      inBitstream32        : in  std_logic_vector(31 downto 0);
+      outBitstreamFifoFull : out std_logic;
+      outStarted           : out std_logic;
+      outStatusReg         : out std_logic_vector(15 downto 0);
+      outRebootStatus      : out std_logic_vector(31 downto 0);
+      outSpiCsB            : out std_logic;
+      outSpiMosi           : out std_logic;
+      inSpiMiso            : in  std_logic;
+      outSpiWpB            : out std_logic;
+      outSpiHoldB          : out std_logic);
   end component;
 
   component dcm_user_clk
@@ -829,34 +943,37 @@ architecture Behavioral of WREB_v4 is
   end component;
 
 -- Clocks
---      signal pgpRefClk                : std_logic;
-  signal clk_100_Mhz : std_logic;
-  signal clk_50_Mhz  : std_logic;
-  signal pgp_usr_clk : std_logic;
+  signal pgpRefClk       : std_logic;
+  signal stable_clk      : std_logic;
+  signal stable_reset    : std_logic;
+  signal stable_clk_lock : std_logic;
+  signal clk_100_Mhz     : std_logic;
+  signal clk_25_Mhz      : std_logic;
+  signal usrClk          : std_logic;
 
 -- Reset
-  signal n_rst       : std_logic;
-  signal pgp_usr_rst : std_logic;
-  signal sync_res    : std_logic;
-  signal sync_res_1  : std_logic;
-  signal sync_res_2  : std_logic;
+  signal n_rst      : std_logic;
+  signal usrRst     : std_logic;
+  signal sync_res   : std_logic;
+  signal sync_res_1 : std_logic;
+  signal sync_res_2 : std_logic;
 
 -- SCI signals
-  signal regReq          : std_logic;
-  signal regOp           : std_logic;
-  signal RegAddr         : std_logic_vector(23 downto 0);
-  signal RegDataWr       : std_logic_vector(31 downto 0);
-  signal regAck          : std_logic;
-  signal regFail         : std_logic;
-  signal RegDataRd       : std_logic_vector(31 downto 0);
-  signal RegWrEn         : std_logic_vector(31 downto 0);
-  signal dataWrEn        : std_logic;
-  signal dataSOT         : std_logic;
-  signal dataEOT         : std_logic;
-  signal image_in        : std_logic_vector(17 downto 0);
-  signal StatusAddr      : std_logic_vector(23 downto 0);
-  signal StatusReg       : std_logic_vector(31 downto 0);
-  signal StatusRst       : std_logic;
+  signal regReq     : std_logic;
+  signal regOp      : std_logic;
+  signal RegAddr    : std_logic_vector(23 downto 0);
+  signal RegDataWr  : std_logic_vector(31 downto 0);
+  signal regAck     : std_logic;
+  signal regFail    : std_logic;
+  signal RegDataRd  : std_logic_vector(31 downto 0);
+  signal RegWrEn    : std_logic_vector(31 downto 0);
+  signal dataWrEn   : std_logic;
+  signal dataSOT    : std_logic;
+  signal dataEOT    : std_logic;
+  signal image_in   : std_logic_vector(17 downto 0);
+  signal StatusAddr : std_logic_vector(23 downto 0);
+  signal StatusReg  : std_logic_vector(31 downto 0);
+  signal StatusRst  : std_logic;
 
 -- CMD interpreter signals
   signal regDataWr_masked   : std_logic_vector(31 downto 0);
@@ -866,6 +983,23 @@ architecture Behavioral of WREB_v4 is
   signal load_time_base_lsw : std_logic;
   signal load_time_base_MSW : std_logic;
   signal cnt_preset         : std_logic_vector(63 downto 0);
+
+  -- sync commands signals
+  signal sync_cmd_en         : std_logic;
+  signal sync_cmd_in         : std_logic_vector(7 downto 0);
+  signal sync_cmd_out        : std_logic_vector(7 downto 0);
+  signal sync_cmd_delay_en   : std_logic;
+--  signal sync_cmd_mask_en    : std_logic;
+  signal sync_cmd_delay_read : std_logic_vector(7 downto 0);
+--  signal sync_cmd_mask_read  : std_logic_vector(31 downto 0);
+
+-- iterrupt signals
+  signal interrupt_bus_in  : std_logic_vector(13 downto 0);
+  signal mask_bus_in_en    : std_logic;
+  signal mask_bus_out      : std_logic_vector(13 downto 0);
+  signal interrupt_en_out  : std_logic;
+  signal interrupt_bus_out : std_logic_vector(13 downto 0);
+  signal fe_reset_notice   : std_logic;
 
   -- BRS signals
   signal time_base_actual_value : std_logic_vector(63 downto 0);
@@ -969,8 +1103,10 @@ architecture Behavioral of WREB_v4 is
 
 
 -- CABAC bias
-  signal c_bias_load_start : std_logic;
-  signal c_bias_ldac_start : std_logic;
+  signal c_bias_dac_cmd_err : std_logic_vector(2 downto 0);
+  signal c_bias_v_undr_th   : std_logic_vector(2 downto 0);
+  signal c_bias_load_start  : std_logic;
+  signal c_bias_ldac_start  : std_logic;
 
 -- ltc2945 V & I sensors read
   signal V_I_read_start        : std_logic;
@@ -1044,11 +1180,12 @@ architecture Behavioral of WREB_v4 is
   signal slow_adc_data_from_adc_int : std_logic_vector(15 downto 0);
 
 -- REB 1wire serial number
-  signal reb_onewire_reset : std_logic;
-  signal reb_sn_crc_ok     : std_logic;
-  signal reb_sn_dev_error  : std_logic;
-  signal reb_sn            : std_logic_vector(47 downto 0);
-  signal reb_sn_timeout    : std_logic;
+  signal reb_onewire_reset      : std_logic;
+  signal reb_onewire_reset_lock : std_logic;
+  signal reb_sn_crc_ok          : std_logic;
+  signal reb_sn_dev_error       : std_logic;
+  signal reb_sn                 : std_logic_vector(47 downto 0);
+  signal reb_sn_timeout         : std_logic;
 
 -- CCD clock enable
   signal ccd1_clk_en_out_int : std_logic;
@@ -1070,17 +1207,21 @@ architecture Behavioral of WREB_v4 is
   signal CABAC_reg_en : std_logic;
 
 ------ MISC ------
-  signal dcm_locked   : std_logic;
-  signal test_port    : std_logic_vector(3 downto 0);
+  signal dcm_locked : std_logic;
+  signal test_port  : std_logic_vector(3 downto 0);
 
 -- CABAC_pulse
   signal cabac_pulse_ccd_1 : std_logic;
   signal cabac_pulse_ccd_2 : std_logic;
 
 -- back bias switch signals
-  signal en_back_bias_sw     : std_logic;
-  signal back_bias_sw_int    : std_logic;
-  signal back_bias_clamp_int : std_logic;
+  signal en_back_bias_sw               : std_logic;
+  signal back_bias_sw_protected        : std_logic;
+  signal back_bias_sw_protected_int    : std_logic;
+  signal back_bias_clamp_protected_int : std_logic;
+  signal back_bias_clamp_int           : std_logic;
+  signal back_bias_sw_error            : std_logic;
+  signal back_bias_sw_error_int        : std_logic;
 
 -- this line enables the output buffers 
   signal enable_io : std_logic;
@@ -1093,9 +1234,18 @@ architecture Behavioral of WREB_v4 is
 
   -- multiboot
   signal start_multiboot : std_logic;
-  signal mb_en           : std_logic;
-  signal mb_en_1         : std_logic;
-  signal mb_en_2         : std_logic;
+
+  -- bitstream Remote Update 
+
+  signal ru_start               : std_logic;
+  signal ru_transfer_done       : std_logic;
+  signal ru_image_ID_we         : std_logic;
+  signal ru_bitstream_we        : std_logic;
+  signal ru_bitstream_fifo_full : std_logic;
+  signal ru_busy                : std_logic;
+  signal ru_satatus_reg         : std_logic_vector(15 downto 0);
+  signal ru_reboot_status       : std_logic_vector(31 downto 0);
+
 
   signal LTC2945_SDA_int    : std_logic;
   signal LTC2945_SCL_int    : std_logic;
@@ -1115,6 +1265,8 @@ architecture Behavioral of WREB_v4 is
   signal aspic_t_v_ss_ccd1_int : std_logic;
   signal aspic_t_v_ss_ccd2_int : std_logic;
   signal aspic_t_v_sclk_int    : std_logic;
+
+  constant TPD_C : time := 1 ns;
   
 
 begin
@@ -1127,13 +1279,15 @@ begin
 
 
 -- trigger signals
-  seq_start       <= trigger_val_bus(2) and trigger_ce_bus(2);
+  seq_start       <= (trigger_val_bus(2) and trigger_ce_bus(2)) or sync_cmd_out(0);
   V_I_read_start  <= trigger_val_bus(3) and trigger_ce_bus(3);
   temp_read_start <= trigger_val_bus(4) and trigger_ce_bus(4);
 --  fast_adc_start  <= trigger_val_bus(5) and trigger_ce_bus(5);
 
 -- temperature signals
   temp_busy <= DREB_temp_busy or REB_temp_busy_gr1;
+
+  interrupt_bus_in <= "00" & x"0" & sequencer_outputs(31) & temp_busy & V_I_busy & dataEOT & dataSOT & sequencer_busy & sequencer_busy & fe_reset_notice;
 
 
   ASPIC_spi_mosi_ccd_1  <= ASPIC_mosi_int;
@@ -1176,6 +1330,8 @@ begin
   gpio_0_int <= sequencer_outputs(16);
   gpio_1_int <= sequencer_outputs(17);
 
+  gpio_2 <= sequencer_outputs(16);
+
 ------------ assignment for test ------------
 --      test_port(10 downto 0)  <= sequencer_outputs(10 downto 0);
 --      test_port(11)                           <= sequencer_outputs(12);
@@ -1202,26 +1358,76 @@ begin
   aspic_t_v_sclk    <= aspic_t_v_sclk_int;
 
 
- LsstSci_0 : LsstSci
+  U_LocRefClkIbufds : IBUFDS_GTE2
+    port map (
+      I     => PgpRefClk_P,
+      IB    => PgpRefClk_M,
+      CEB   => '0',
+      O     => PgpRefClk,
+      ODIV2 => open);
+
+  --stable_clk_bufg : BUFG
+  --  port map (
+  --    I => PgpRefClk,
+  --    O => stable_clk);
+
+
+
+
+  ClockManager_local_100MHz : entity work.ClockManager7
+    generic map (
+      TPD_G              => TPD_C,
+      TYPE_G             => "MMCM",
+      INPUT_BUFG_G       => true,
+      FB_BUFG_G          => true,
+      OUTPUT_BUFG_G      => false,
+      RST_IN_POLARITY_G  => '1',
+      NUM_CLOCKS_G       => 1,
+      BANDWIDTH_G        => "OPTIMIZED",
+      CLKIN_PERIOD_G     => 4.0,
+      DIVCLK_DIVIDE_G    => 1,
+      CLKFBOUT_MULT_F_G  => 4.000,
+      CLKOUT0_DIVIDE_F_G => 10.000,
+      CLKOUT0_RST_HOLD_G => 8)
+    port map (
+      clkIn     => PgpRefClk,
+      rstIn     => '0',
+      clkOut(0) => stable_clk,
+      locked    => stable_clk_lock,
+      rstOut(0) => open);
+
+  --stable_reset <= not stable_clk_lock;
+
+
+  LsstSci_0 : LsstSci
     port map (
       -------------------------------------------------------------------------
       -- FPGA Interface
       -------------------------------------------------------------------------
+
+      --   StableClk => loc_stable_clk,
+      --   StableRst => stable_reset,
+
+      StableClk => stable_clk,
+      StableRst => '0',                 -- not used
+
       FpgaRstL => n_rst,
 
-      PgpClkP => PgpRefClk_P,
-      PgpClkM => PgpRefClk_M,
-      PgpRxP  => PgpRx_p,
-      PgpRxM  => PgpRx_m,
-      PgpTxP  => PgpTx_p,
-      PgpTxM  => PgpTx_m,
+      PgpRefClk => PgpRefClk,
+
+
+      PgpRxP => PgpRx_p,
+      PgpRxM => PgpRx_m,
+      PgpTxP => PgpTx_p,
+      PgpTxM => PgpTx_m,
       -------------------------------------------------------------------------
       -- Clock/Reset Generator Interface
       -------------------------------------------------------------------------
-      ClkOut  =>  pgp_usr_clk,
-      RstOut  => pgp_usr_rst,
-      ClkIn   => clk_100_Mhz,
-      RstIn   => sync_res,
+      ClkOut => usrClk,
+      RstOut => usrRst,
+      ClkIn  => clk_100_Mhz,
+      RstIn  => sync_res,
+
       -------------------------------------------------------------------------
       -- SCI Register Encoder/Decoder Interface
       -------------------------------------------------------------------------
@@ -1244,14 +1450,15 @@ begin
       -------------------------------------------------------------------------
       -- Notification Interface
       -------------------------------------------------------------------------
-      NoticeEn => '0',
-      Notice   => (others => '0'),
+      NoticeEn => interrupt_en_out,
+      -- Notice   => interrupt_bus_out,
+      Notice   => x"0000",
 
       -------------------------------------------------------------------------
       -- Synchronous Command Interface
       -------------------------------------------------------------------------
-      SyncCmdEn => open,
-      SyncCmd   => open,
+      SyncCmdEn => sync_cmd_en,
+      SyncCmd   => sync_cmd_in,
 
       -------------------------------------------------------------------------
       -- Status Block Interface
@@ -1264,44 +1471,56 @@ begin
       -- Debug Interface
       -------------------------------------------------------------------------
       PgpLocLinkReadyOut => open,
-      PgpRemLinkReadyOut => open
+      PgpRemLinkReadyOut => open,
+      PgpRxPhyReadyOut   => open,
+      PgpTxPhyReadyOut   => open
       );
-
 
   wreb_v4_cmd_interpeter_0 : wreb_v4_cmd_interpeter
     port map (
-      reset                    => sync_res,
-      clk                      => clk_100_MHz,
+      reset                  => sync_res,
+      clk                    => clk_100_MHz,
 -- signals from/to SCI
-      regReq                   => regReq,  -- with this line the master start a read/write procedure (1 to start)
-      regOp                    => regOp,  -- this line define if the procedure is read or write (1 to write)
-      regAddr                  => RegAddr,  -- address bus
-      statusReg                => StatusReg,  -- status reg bus. The RCI handle this bus and this machine pass it to the sure if he wants to read it
-      regWrEn                  => RegWrEn,  -- write enable bus. This bus enables the data write bits
-      regDataWr_masked         => regDataWr_masked,  -- data write bus masked. Is the logical AND of data write bus and write enable bus
-      regAck                   => regAck,  -- acknowledge line to activate when the read/write procedure is completed
-      regFail                  => regFail,  -- line to activate when an error occurs during the read/write procedure
-      regDataRd                => RegDataRd,  -- data bus to RCI used to transfer read data
-      StatusReset              => StatusRst,  -- status block reset
+      regReq                 => regReq,  -- with this line the master start a read/write procedure (1 to start)
+      regOp                  => regOp,  -- this line define if the procedure is read or write (1 to write)
+      regAddr                => RegAddr,  -- address bus
+      statusReg              => StatusReg,  -- status reg bus. The RCI handle this bus and this machine pass it to the sure if he wants to read it
+      regWrEn                => RegWrEn,  -- write enable bus. This bus enables the data write bits
+      regDataWr_masked       => regDataWr_masked,  -- data write bus masked. Is the logical AND of data write bus and write enable bus
+      regAck                 => regAck,  -- acknowledge line to activate when the read/write procedure is completed
+      regFail                => regFail,  -- line to activate when an error occurs during the read/write procedure
+      regDataRd              => RegDataRd,  -- data bus to RCI used to transfer read data
+      StatusReset            => StatusRst,  -- status block reset
 -- Base Register Set signals            
-      busy_bus                 => busy_bus,  -- busy bus is composed by the different register sets busy
-      time_base_actual_value   => time_base_actual_value,  -- time base value 
-      trig_tm_value_SB         => trig_tm_value_SB,  -- Status Block trigger time 
-      trig_tm_value_TB         => trig_tm_value_TB,  -- Time Base trigger time
-      trig_tm_value_seq        => trig_tm_value_seq,  -- Sequencer Trigger time
-      trig_tm_value_V_I        => trig_tm_value_V_I,  -- Voltage and current sens trigger time
-      trig_tm_value_pcb_t      => trig_tm_value_pcb_t,  -- PCB temperature Trigger time
+      busy_bus               => busy_bus,  -- busy bus is composed by the different register sets busy
+      time_base_actual_value => time_base_actual_value,  -- time base value 
+      trig_tm_value_SB       => trig_tm_value_SB,  -- Status Block trigger time 
+      trig_tm_value_TB       => trig_tm_value_TB,  -- Time Base trigger time
+      trig_tm_value_seq      => trig_tm_value_seq,  -- Sequencer Trigger time
+      trig_tm_value_V_I      => trig_tm_value_V_I,  -- Voltage and current sens trigger time
+      trig_tm_value_pcb_t    => trig_tm_value_pcb_t,  -- PCB temperature Trigger time
 --      trig_tm_value_f_adc      => trig_tm_value_fast_adc,  -- fast ADC Trigger time
-      trigger_ce_bus           => trigger_ce_bus,  -- bus to enable register sets trigger. To trigger a register set that stops itself use en AND val                                      
-      trigger_val_bus          => trigger_val_bus,  -- bus of register sets trigger values  
-      load_time_base_lsw       => load_time_base_lsw,  -- ce signal to load the time base lsw
-      load_time_base_MSW       => load_time_base_MSW,  -- ce signal to load the time base MSW
-      cnt_preset               => cnt_preset,  -- preset value for the time base counter
-      Mgt_avcc_ok              => '0',
-      Mgt_accpll_ok            => '0',
-      Mgt_avtt_ok              => '0',
-      V3_3v_ok                 => '0',
-      Switch_addr              => r_add,
+      trigger_ce_bus         => trigger_ce_bus,  -- bus to enable register sets trigger. To trigger a register set that stops itself use en AND val                                      
+      trigger_val_bus        => trigger_val_bus,  -- bus of register sets trigger values  
+      load_time_base_lsw     => load_time_base_lsw,  -- ce signal to load the time base lsw
+      load_time_base_MSW     => load_time_base_MSW,  -- ce signal to load the time base MSW
+      cnt_preset             => cnt_preset,  -- preset value for the time base counter
+      Mgt_avcc_ok            => '0',
+      Mgt_accpll_ok          => '0',
+      Mgt_avtt_ok            => '0',
+      V3_3v_ok               => '0',
+      Switch_addr            => r_add,
+
+      -- sync commands
+      sync_cmd_delay_en   => sync_cmd_delay_en,
+      sync_cmd_delay_read => sync_cmd_delay_read,
+      sync_cmd_mask_en    => open,
+      sync_cmd_mask_read  => x"00000000",
+
+      -- interrupt commands
+      interrupt_mask_wr_en => mask_bus_in_en,
+      interrupt_mask_read  => mask_bus_out,
+
 -- Image parameters
       image_size               => x"00000000",  -- this register contains the image size (no longer used)
       image_patter_read        => image_patter_read,  -- this register gives the state of image patter gen. 1 is ON
@@ -1311,7 +1530,7 @@ begin
       ccd_sel_en               => open,  -- on GREB only first two stripes are active                                                  -- register enable for CCD acquisition selector 
 -- Sequencer
       seq_time_mem_readbk      => seq_time_mem_readbk,  -- time memory read bus
-      seq_out_mem_readbk       => seq_out_mem_readbk,  -- time memory read bus
+      seq_out_mem_readbk       => seq_out_mem_readbk,   -- time memory read bus
       seq_prog_mem_readbk      => seq_prog_mem_readbk,  -- sequencer program memory read
       seq_time_mem_w_en        => seq_time_mem_w_en,  -- this signal enables the time memory write
       seq_out_mem_w_en         => seq_out_mem_w_en,  -- this signal enables the output memory write
@@ -1350,7 +1569,9 @@ begin
       clk_rail_load_start => clk_rail_load_start,
       clk_rail_ldac_start => clk_rail_ldac_start,
 
---  BIAS DAC (former CABAC bias DAC)                
+--  BIAS DAC (former CABAC bias DAC)
+      c_bias_dac_cmd_err    => c_bias_dac_cmd_err,
+      c_bias_v_undr_th      => c_bias_v_undr_th,
       c_bias_load_start     => c_bias_load_start,
       c_bias_ldac_start     => c_bias_ldac_start,
 -- DREB voltage and current sensors
@@ -1447,11 +1668,21 @@ begin
       CABAC_reg_in         => CABAC_reg_in,
       CABAC_reg_en         => CABAC_reg_en,
 -- back bias switch
-      back_bias_sw_rb      => back_bias_sw_int,
-      back_bias_cl_rb      => back_bias_clamp_int,
+      back_bias_sw_rb      => back_bias_sw_protected_int,
+      back_bias_cl_rb      => back_bias_clamp_protected_int,
+      back_bias_sw_error   => back_bias_sw_error_int,
       en_back_bias_sw      => en_back_bias_sw,
+
 -- multiboot
-      start_multiboot   => start_multiboot
+      remote_update_reboot_status => ru_reboot_status,
+      start_multiboot             => start_multiboot,
+
+-- remote update
+      remote_update_fifo_full  => ru_bitstream_fifo_full,
+      remote_update_status_reg => ru_satatus_reg,
+      start_remote_update      => ru_start,
+      remote_update_bitstrm_we => ru_bitstream_we,
+      remote_update_daq_done   => ru_transfer_done
       );
 
   base_reg_set : base_reg_set_top
@@ -1477,6 +1708,36 @@ begin
       trig_tm_value_pcb  => trig_tm_value_pcb_t,
       trig_tm_value_adc  => open
       );
+
+  sync_cmd_decoder_top_1 : sync_cmd_decoder_top
+    port map (
+      pgp_clk      => usrClk,
+      pgp_reset    => usrRst,
+      clk          => clk_100_Mhz,
+      reset        => sync_res,
+      sync_cmd_en  => sync_cmd_en,
+      delay_en     => sync_cmd_delay_en,
+      delay_in     => regDataWr_masked(7 downto 0),
+      delay_read   => sync_cmd_delay_read,
+      sync_cmd     => sync_cmd_in,
+      sync_cmd_out => sync_cmd_out);
+
+  -- edge_en selects the edge that triggers the input 1: rising 0 : falling
+  -- for the iterrupt_bus_in
+  -- edge_en is "00" &  x"0" & "10011011";
+  
+  REB_interrupt_top_1 : REB_interrupt_top
+    generic map (
+      edge_en => "00" & x"0" & "10011011")
+    port map (
+      clk               => usrClk,
+      reset             => usrRst,
+      interrupt_bus_in  => interrupt_bus_in,
+      mask_bus_in_en    => mask_bus_in_en,
+      mask_bus_in       => regDataWr_masked(13 downto 0),
+      mask_bus_out      => mask_bus_out,
+      interrupt_en_out  => interrupt_en_out,
+      interrupt_bus_out => interrupt_bus_out);
 
   sequencer_v3_0 : sequencer_v3_top
     port map (
@@ -1599,17 +1860,33 @@ begin
       ce       => aspic_nap_mode_en,
       data_out => aspic_nap_mode_ccd_2);  
 
-  c_bias_DAC : ad53xx_DAC_top
+  --c_bias_DAC : ad53xx_DAC_top
+  --  port map (
+  --    clk         => clk_100_Mhz,
+  --    reset       => sync_res,
+  --    start_write => c_bias_load_start,
+  --    start_ldac  => c_bias_ldac_start,
+  --    d_to_slave  => regDataWr_masked(15 downto 0),
+  --    mosi        => din_C_BIAS,
+  --    ss          => sync_C_BIAS,
+  --    sclk        => sclk_C_BIAS,
+  --    ldac        => ldac_C_BIAS);
+
+  c_bias_DAC : ad53xx_DAC_protection_top
     port map (
-      clk         => clk_100_Mhz,
-      reset       => sync_res,
-      start_write => c_bias_load_start,
-      start_ldac  => c_bias_ldac_start,
-      d_to_slave  => regDataWr_masked(15 downto 0),
-      mosi        => din_C_BIAS,
-      ss          => sync_C_BIAS,
-      sclk        => sclk_C_BIAS,
-      ldac        => ldac_C_BIAS);
+      clk             => clk_100_Mhz,
+      reset           => sync_res,
+      start_write     => c_bias_load_start,
+      start_ldac      => c_bias_ldac_start,
+      bbs_switch_on   => back_bias_sw_protected_int,
+      d_to_slave      => regDataWr_masked(15 downto 0),
+      command_error   => c_bias_dac_cmd_err,
+      values_under_th => c_bias_v_undr_th,
+      mosi            => din_C_BIAS,
+      ss              => sync_C_BIAS,
+      sclk            => sclk_C_BIAS,
+      ldac            => ldac_C_BIAS
+      );
 
   clk_rails_DAC : dual_ad53xx_DAC_top
     port map (
@@ -1815,8 +2092,10 @@ begin
       CLK_DIV    => 12)
     port map(
       sys_clk     => clk_100_Mhz,
-      latch_reset => sync_res,
-      sys_reset   => reb_onewire_reset,
+      --    latch_reset => sync_res,
+      latch_reset => reb_onewire_reset_lock,
+      --    sys_reset   => reb_onewire_reset,
+      sys_reset   => reb_onewire_reset_lock,
       crc_ok      => reb_sn_crc_ok,
       dev_error   => reb_sn_dev_error,
       data        => open,
@@ -1825,22 +2104,42 @@ begin
       timeout     => reb_sn_timeout,
       dq          => reb_sn_onewire_int
       );
+  reb_onewire_reset_lock <= not dcm_locked;
+
+
+
+
+  ------------------------------------------------------------------------------
+  -- Back Bias switch 
+  ------------------------------------------------------------------------------
+
+  back_bias_sw_protected <= regDataWr_masked(0) and not (or_reduce(c_bias_v_undr_th));
+  back_bias_sw_error     <= regDataWr_masked(0) and (or_reduce(c_bias_v_undr_th));
 
   back_bias_sw : ff_ce
     port map (
       reset    => sync_res,
       clk      => clk_100_Mhz,
-      data_in  => regDataWr_masked(0),
+      data_in  => back_bias_sw_protected,
       ce       => en_back_bias_sw,
-      data_out => back_bias_sw_int); 
+      data_out => back_bias_sw_protected_int);
 
-  back_bias_clamp_int <= not back_bias_sw_int;
+  back_bias_error_ff : ff_ce
+    port map (
+      reset    => sync_res,
+      clk      => clk_100_Mhz,
+      data_in  => back_bias_sw_error,
+      ce       => en_back_bias_sw,
+      data_out => back_bias_sw_error_int); 
+
+  back_bias_clamp_protected_int <= not back_bias_sw_protected_int;
+
 
   back_bias_reg : ff_ce
     port map (
       reset    => sync_res,
       clk      => clk_100_Mhz,
-      data_in  => back_bias_sw_int,
+      data_in  => back_bias_sw_protected_int,
       ce       => '1',
       data_out => backbias_ssbe); 
 
@@ -1848,35 +2147,98 @@ begin
     port map (
       preset   => sync_res,
       clk      => clk_100_Mhz,
-      data_in  => back_bias_clamp_int,
+      data_in  => back_bias_clamp_protected_int,
       ce       => '1',
-      data_out => backbias_clamp);       
+      data_out => backbias_clamp);
+
+
+
+
+
+
+
+
+
+
+
+  --back_bias_sw : ff_ce
+  --  port map (
+  --    reset    => sync_res,
+  --    clk      => clk_100_Mhz,
+  --    data_in  => regDataWr_masked(0),
+  --    ce       => en_back_bias_sw,
+  --    data_out => back_bias_sw_int); 
+
+  --back_bias_clamp_int <= not back_bias_sw_int;
+
+  --back_bias_reg : ff_ce
+  --  port map (
+  --    reset    => sync_res,
+  --    clk      => clk_100_Mhz,
+  --    data_in  => back_bias_sw_int,
+  --    ce       => '1',
+  --    data_out => backbias_ssbe); 
+
+  --back_bias_clamp_reg : ff_ce_pres
+  --  port map (
+  --    preset   => sync_res,
+  --    clk      => clk_100_Mhz,
+  --    data_in  => back_bias_clamp_int,
+  --    ce       => '1',
+  --    data_out => backbias_clamp);       
 
 
 -- clock 
-  
 
-  multiboot_fsm_0 : multiboot_fsm
+
+--  multiboot_fsm_0 : multiboot_fsm
+--    port map (
+--      TRIGGER => mb_en_2,
+--      SYSCLK  => clk_50_Mhz
+--      );
+----
+--  flop1_mb : FD port map (D => start_multiboot, C => clk_50_Mhz, Q => mb_en);
+--  flop2_mb : FD port map (D => mb_en, C => clk_50_Mhz, Q => mb_en_1);
+
+--  mb_en_2 <= mb_en or mb_en_1;
+
+
+  ru_image_ID_we <= ru_start;           -- this works because ru_start is
+                                        -- internally delayed for sync.
+
+  Remote_Update_top : multiboot_top
     port map (
-      TRIGGER => mb_en_2,
-      SYSCLK  => clk_50_Mhz
-      );
---
-  flop1_mb : FD port map (D => start_multiboot, C => clk_50_Mhz, Q => mb_en);
-  flop2_mb : FD port map (D => mb_en, C => clk_50_Mhz, Q => mb_en_1);
-
-  mb_en_2 <= mb_en or mb_en_1;
-
+      inBitstreamClk       => clk_100_Mhz,
+      inSpiClk             => clk_25_Mhz,
+      inReset_EnableB      => sync_res,
+      inCheckIdOnly        => '0',
+      inVerifyOnly         => '0',
+      inStartProg          => ru_start,
+      inDaqDone            => ru_transfer_done,
+      inStartReboot        => start_multiboot,
+      inImageSelWe         => ru_image_ID_we,
+      inImageSel           => regDataWr_masked(1 downto 0),
+      inBitstreamWe        => ru_bitstream_we,
+      inBitstream32        => regDataWr_masked,
+      outBitstreamFifoFull => ru_bitstream_fifo_full,
+      outStarted           => ru_busy,
+      outStatusReg         => ru_satatus_reg,
+      outRebootStatus      => ru_reboot_status,
+      outSpiCsB            => ru_outSpiCsB,
+      outSpiMosi           => ru_outSpiMosi,
+      inSpiMiso            => ru_inSpiMiso,
+      outSpiWpB            => ru_outSpiWpB,
+      outSpiHoldB          => ru_outSpiHoldB);
 
   dcm_user_clk_0 : dcm_user_clk
     port map
     (                                   -- Clock in ports
-      CLK_IN1  => pgp_usr_clk,
+      CLK_IN1  => usrClk,
       -- Clock out ports
       CLK_OUT1 => clk_100_Mhz,
-      CLK_OUT2 => clk_50_Mhz,
+      CLK_OUT2 => clk_25_Mhz,
       -- Status and control signals
-      LOCKED   => open);
+      LOCKED   => dcm_locked);
 
 ---- check master clk
 --
@@ -1909,15 +2271,20 @@ begin
   Ureset : IBUF port map (O => n_rst, I => Pwron_Rst_L);
 
                                         -- sync reset for the user part (from PGP)
-  flop1_res : FD port map (D => pgp_usr_rst, C => clk_100_Mhz, Q => sync_res_1);
+  flop1_res : FD port map (D => usrRst, C => clk_100_Mhz, Q => sync_res_1);
   flop2_res : FD port map (D => sync_res_1, C => clk_100_Mhz, Q => sync_res_2);
   flop3_res : FD port map (D => sync_res_2, C => clk_100_Mhz, Q => sync_res);
 
--- Clock conditioning
-  -- PGP serdes clk
---      U_PgpRefClk : IBUFDS port map (I  => PgpRefClk_P,
---                                  IB => PgpRefClk_M,
---                                  O  => pgpRefClk);
+  -- reset notice: this ff generates a signal for the reset notice
+  reset_notice : FDRE port map (
+    C  => clk_100_Mhz,
+    R  => sync_res,
+    CE => '1',
+    D  => '1',
+    Q  => fe_reset_notice);
+
+
+
 
 ------ MISC ------                                  
 

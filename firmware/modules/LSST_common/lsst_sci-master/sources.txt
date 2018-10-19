@@ -8,3 +8,4 @@ vhdl work rtl/LsstSci32bZExt.vhd
 vhdl work rtl/LsstSciStatusBlock.vhd
 vhdl work rtl/LsstSci.vhd
 vhdl work rtl/LsstPgpFrontEnd.vhd
+vhdl work rtl/PulseSynchronizer.vhd

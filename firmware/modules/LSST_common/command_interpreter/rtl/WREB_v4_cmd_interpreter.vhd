@@ -76,6 +76,16 @@ entity wreb_v4_cmd_interpeter is
         V3_3v_ok      : in std_logic;
         Switch_addr   : in std_logic_vector(7 downto 0);
 
+        -- sync commands
+        sync_cmd_delay_en   : out std_logic;
+        sync_cmd_delay_read : in  std_logic_vector(7 downto 0);
+        sync_cmd_mask_en    : out std_logic;
+        sync_cmd_mask_read  : in  std_logic_vector(31 downto 0);
+
+-- interrupt commands
+        interrupt_mask_wr_en : out std_logic;
+        interrupt_mask_read  : in  std_logic_vector(13 downto 0);
+
 -- Image parameters
         image_size        : in  std_logic_vector(31 downto 0);  -- this register contains the image size
         image_patter_read : in  std_logic;  -- this register gives the state of image patter gen. 1 is ON
@@ -123,13 +133,15 @@ entity wreb_v4_cmd_interpeter is
         aspic_nap_ccd1_in    : in  std_logic;
 --        aspic_nap_ccd2_in    : in  std_logic;
 
--- CCD clock rails DAC          
+-- CCD clock rails DAC
         clk_rail_load_start : out std_logic;
         clk_rail_ldac_start : out std_logic;
 
--- BIAS DAC (former CABAC bias DAC)               
-        c_bias_load_start : out std_logic;
-        c_bias_ldac_start : out std_logic;
+-- BIAS DAC (former CABAC bias DAC)
+        c_bias_dac_cmd_err : in  std_logic_vector(2 downto 0);
+        c_bias_v_undr_th   : in  std_logic_vector(2 downto 0);
+        c_bias_load_start  : out std_logic;
+        c_bias_ldac_start  : out std_logic;
 
 -- DREB voltage and current sensors
         error_V_HTR_voltage   : in std_logic;
@@ -237,12 +249,21 @@ entity wreb_v4_cmd_interpeter is
         CABAC_reg_en : out std_logic;
 
 -- back bias switch
-        back_bias_sw_rb : in  std_logic;
-        back_bias_cl_rb : in  std_logic;
-        en_back_bias_sw : out std_logic;
+        back_bias_sw_rb    : in  std_logic;
+        back_bias_cl_rb    : in  std_logic;
+        back_bias_sw_error : in  std_logic;
+        en_back_bias_sw    : out std_logic;
 
 -- multiboot
-        start_multiboot : out std_logic
+        remote_update_reboot_status : in  std_logic_vector(31 downto 0);
+        start_multiboot             : out std_logic;
+
+-- remote update
+        remote_update_fifo_full  : in  std_logic;
+        remote_update_status_reg : in  std_logic_vector(15 downto 0);
+        start_remote_update      : out std_logic;
+        remote_update_bitstrm_we : out std_logic;
+        remote_update_daq_done   : out std_logic
 
         );
 
@@ -259,6 +280,9 @@ architecture Behavioral of wreb_v4_cmd_interpeter is
                       trigger_time_V_I_lsw, trigger_time_V_I_MSW, trigger_time_pcb_t_lsw, trigger_time_pcb_t_MSW,
                       --trig_tm_value_f_adc_lsw, trig_tm_value_f_adc_MSW,
                       v_ok_state, time_base_set_lsw, time_base_set_MSW, trigger_state, statusReg_rd,
+                      sync_cmd_delay_wr_state, sync_cmd_delay_rd_state,
+                      sync_cmd_mask_wr_state, sync_cmd_mask_rd_state,
+                      interrupt_mask_wr_state, interrupt_mask_rd_state, status_block_rst_state,
 -- Image parameters
                       read_image_size_state, read_image_patter_mode_state, read_ccd_sel_state,
                       set_image_size_state, set_img_pattern_gen_state,
@@ -288,7 +312,8 @@ architecture Behavioral of wreb_v4_cmd_interpeter is
 
 
 -- CABAC bias DAC       
-                      c_bias_load_config_state, c_bias_ldac_state,
+                      c_bias_load_config_state, c_bias_ldac_state, c_bias_read_error_vut_state,
+
 
 -- DREB voltage and current sensors
                       V_HTR_voltage_state, V_HTR_current_state,
@@ -360,17 +385,21 @@ architecture Behavioral of wreb_v4_cmd_interpeter is
                       back_bias_sw_set_state, back_bias_sw_read_state,
 
 -- multiboot    
-                      start_multiboot_state
+                      start_multiboot_state, reboot_status_rd_state,
+
+-- remote update
+                      remote_update_rd_status_state,
+                      start_remote_update_state, remote_update_bitstrm_we_state, remote_update_daq_done_state
 
                       );
 
   signal pres_state, next_state : state_type;
 
-    -- this directive is to force the encoding to gray
+  -- this directive is to force the encoding to gray
   -- It is required to solve a vivado bug that apperars if there are more than
   -- 134 states
-  attribute fsm_encoding : string;
-attribute fsm_encoding of pres_state, next_state : signal is "gray";
+  attribute fsm_encoding                           : string;
+  attribute fsm_encoding of pres_state, next_state : signal is "gray";
 
 -- RCI signals
   signal next_regAck      : std_logic;
@@ -384,6 +413,13 @@ attribute fsm_encoding of pres_state, next_state : signal is "gray";
   signal next_load_time_base_lsw : std_logic;
   signal next_load_time_base_MSW : std_logic;
   signal next_cnt_preset         : std_logic_vector(63 downto 0);
+
+  -- sync commands signals
+  signal next_sync_cmd_delay_en : std_logic;
+  signal next_sync_cmd_mask_en  : std_logic;
+
+  -- interrupt signals 
+  signal next_interrupt_mask_wr_en : std_logic;
 
 -- Image parameters
   signal next_image_size_en   : std_logic;
@@ -452,6 +488,11 @@ attribute fsm_encoding of pres_state, next_state : signal is "gray";
 
 -- multiboot
   signal next_start_multiboot : std_logic;
+
+-- remote update
+  signal next_start_remote_update      : std_logic;
+  signal next_remote_update_bitstrm_we : std_logic;
+  signal next_remote_update_daq_done   : std_logic;
   
 begin
 
@@ -473,6 +514,12 @@ begin
         load_time_base_lsw <= '0';
         load_time_base_MSW <= '0';
         cnt_preset         <= (others => '0');
+        sync_cmd_delay_en  <= '0';
+        sync_cmd_mask_en   <= '0';
+
+        -- ineterrupt signals reset state
+        interrupt_mask_wr_en <= '0';
+
 
         -- image parameters reset state
         image_size_en   <= '0';
@@ -542,6 +589,11 @@ begin
         -- multiboot
         start_multiboot <= '0';
 
+        -- remote update
+        start_remote_update      <= '0';
+        remote_update_bitstrm_we <= '0';
+        remote_update_daq_done   <= '0';
+
       else
         pres_state <= next_state;
 
@@ -552,11 +604,15 @@ begin
         StatusReset <= next_StatusReset;
 
         -- BRS latch
-        trigger_ce_bus     <= next_trigger_ce_bus;
-        trigger_val_bus    <= next_trigger_val_bus;
-        load_time_base_lsw <= next_load_time_base_lsw;
-        load_time_base_MSW <= next_load_time_base_MSW;
-        cnt_preset         <= next_cnt_preset;
+        trigger_ce_bus       <= next_trigger_ce_bus;
+        trigger_val_bus      <= next_trigger_val_bus;
+        load_time_base_lsw   <= next_load_time_base_lsw;
+        load_time_base_MSW   <= next_load_time_base_MSW;
+        cnt_preset           <= next_cnt_preset;
+        sync_cmd_delay_en    <= next_sync_cmd_delay_en;
+        sync_cmd_mask_en     <= next_sync_cmd_mask_en;
+        interrupt_mask_wr_en <= next_interrupt_mask_wr_en;
+
 
         -- image parameters latch
         image_size_en   <= next_image_size_en;
@@ -625,6 +681,12 @@ begin
 
         -- multiboot
         start_multiboot <= next_start_multiboot;
+
+        -- remote update
+
+        start_remote_update      <= next_start_remote_update;
+        remote_update_bitstrm_we <= next_remote_update_bitstrm_we;
+        remote_update_daq_done   <= next_remote_update_daq_done;
         
       end if;
     end if;
@@ -633,8 +695,17 @@ begin
 
   process (pres_state, regReq , regOP, RegAddr, regdatawr_masked, regwren, switch_addr, time_base_actual_value,
            busy_bus, trig_tm_value_sb, trig_tm_value_tb, trig_tm_value_seq, trig_tm_value_v_i, trig_tm_value_pcb_t,
-           --trig_tm_value_f_adc, 
-           mgt_avcc_ok, image_size, image_patter_read, ccd_sel_read, statusreg, seq_time_mem_readbk,
+           --trig_tm_value_f_adc,
+
+           -- CCD bias
+           c_bias_dac_cmd_err, c_bias_v_undr_th,
+           -- Bacbias switch
+           back_bias_sw_rb, back_bias_cl_rb, back_bias_sw_error,
+
+           mgt_avcc_ok,
+           sync_cmd_delay_read, sync_cmd_mask_read,
+           interrupt_mask_read,
+           image_size, image_patter_read, ccd_sel_read, statusreg, seq_time_mem_readbk,
            seq_out_mem_readbk, seq_prog_mem_readbk, enable_conv_shift_in, start_add_prog_mem_rbk, seq_ind_func_mem_rdbk,
            seq_ind_rep_mem_rdbk, seq_ind_sub_add_mem_rdbk, seq_ind_sub_rep_mem_rdbk, seq_op_code_error, v3_3v_ok,
            aspic_config_r_ccd_1, aspic_config_r_ccd_2, aspic_config_r_ccd_3, aspic_op_end,
@@ -646,11 +717,15 @@ begin
            slow_adc_busy, ck_adc_conv_res, ccd1_adc_conv_res, ccd2_adc_conv_res,
            dreb_sn_crc_ok, dreb_sn , dreb_sn_timeout, reb_sn_crc_ok, reb_sn, reb_sn_timeout, ccd1_clk_en_in, ccd2_clk_en_in,
            aspic_ref_en_in_ccd1, aspic_ref_en_in_ccd2, aspic_5v_en_in_ccd1, aspic_5v_en_in_ccd2,
-           back_bias_cl_rb, mgt_accpll_ok, seq_op_code_error_add, v_htr_voltage, v_htr_current, v_dreb_voltage, mgt_avtt_ok,
+           mgt_accpll_ok, seq_op_code_error_add, v_htr_voltage, v_htr_current, v_dreb_voltage, mgt_avtt_ok,
            v_dreb_current, v_clk_h_voltage, v_clk_h_current, v_ana_voltage, v_ana_current,
            v_od_voltage, v_od_current, t1_dreb, t2_dreb, t1_reb_gr1, t2_reb_gr1, t3_reb_gr1, t4_reb_gr1, t1_reb_gr2,
-           t2_reb_gr2, t3_reb_gr2, t4_reb_gr2, t1_reb_gr3, dreb_sn_dev_error, reb_sn_dev_error, back_bias_sw_rb,
-           CABAC_reg_in, aspic_nap_ccd1_in)
+           t2_reb_gr2, t3_reb_gr2, t4_reb_gr2, t1_reb_gr3, dreb_sn_dev_error, reb_sn_dev_error,
+           CABAC_reg_in, aspic_nap_ccd1_in,
+
+           -- Remote Update
+           remote_update_fifo_full, remote_update_status_reg, remote_update_reboot_status
+           )
 
   begin
 
@@ -662,11 +737,15 @@ begin
     next_StatusReset <= '0';
 
                                         -- BRS default state
-    next_trigger_ce_bus     <= (others => '0');
-    next_trigger_val_bus    <= (others => '0');
-    next_load_time_base_lsw <= '0';
-    next_load_time_base_MSW <= '0';
-    next_cnt_preset         <= (others => '0');
+    next_trigger_ce_bus       <= (others => '0');
+    next_trigger_val_bus      <= (others => '0');
+    next_load_time_base_lsw   <= '0';
+    next_load_time_base_MSW   <= '0';
+    next_cnt_preset           <= (others => '0');
+    next_sync_cmd_delay_en    <= '0';
+    next_sync_cmd_mask_en     <= '0';
+    next_interrupt_mask_wr_en <= '0';
+
 
                                         -- Image Parameters default state
     next_image_size_en   <= '0';
@@ -738,6 +817,12 @@ begin
 
                                         -- multiboot
     next_start_multiboot <= '0';
+
+    -- remote update
+
+    next_start_remote_update      <= '0';
+    next_remote_update_bitstrm_we <= '0';
+    next_remote_update_daq_done   <= '0';
 
 
 
@@ -847,6 +932,15 @@ begin
             elsif (regAddr >= read_status_reg_base) and (regAddr <= read_status_reg_high) then
               next_state <= statusReg_rd;
 
+            elsif regAddr = sync_cmd_delay_cmd then
+              next_state <= sync_cmd_delay_rd_state;
+
+            elsif regAddr = sync_cmd_mask_cmd then
+              next_state <= sync_cmd_mask_rd_state;
+
+            elsif regAddr = interrupt_mask_cmd then
+              next_state <= interrupt_mask_rd_state;
+
               -------- Image parameters read                            
               -- read image size          
             elsif regAddr = image_size_cmd then
@@ -917,6 +1011,11 @@ begin
                                         -- read ASPIC nap mode
             elsif regAddr = aspic_nap_mode_cmd then
               next_state <= read_aspic_nap_mode_state;
+
+              --------CCD bias protection error and flag read
+
+            elsif regAddr = c_bias_err_vut_cmd then
+              next_state <= c_bias_read_error_vut_state;
 
                                         --------REB voltage and current sensors read                           
                                         -- V_HTR voltage read
@@ -1136,11 +1235,17 @@ begin
             elsif regAddr = CABAC_reg_en_cmd then
               next_state <= CABAC_reg_en_rd;
 
-
                                         --------back bias switch read          
                                         -- back bias switch read
             elsif regAddr = back_bias_sw_cmd then
               next_state <= back_bias_sw_read_state;
+
+              ---------- Remote Update read status register
+            elsif regAddr = ru_status_read_cmd then
+              next_state <= remote_update_rd_status_state;
+
+            elsif regAddr = start_multiboot_cmd then
+              next_state <= reboot_status_rd_state;
 
 -- ERROR                                                        
             else
@@ -1174,6 +1279,29 @@ begin
               next_state           <= trigger_state;
               next_trigger_ce_bus  <= regWrEn;
               next_trigger_val_bus <= regDataWr_masked;
+
+---------- Status block
+              -- status block reset
+            elsif regAddr = read_status_reg_base then
+              next_state       <= status_block_rst_state;
+              next_StatusReset <= '1';
+
+---------- Sync Commands 
+              -- sync command 0 delay set
+            elsif regAddr = sync_cmd_delay_cmd then
+              next_state             <= sync_cmd_delay_wr_state;
+              next_sync_cmd_delay_en <= '1';
+
+              -- sync command mask set
+            elsif regAddr = sync_cmd_mask_cmd then
+              next_state            <= sync_cmd_mask_wr_state;
+              next_sync_cmd_mask_en <= '1';
+
+---------- Interrupt 
+              -- interrupt mask set
+            elsif regAddr = interrupt_mask_cmd then
+              next_state                <= interrupt_mask_wr_state;
+              next_interrupt_mask_wr_en <= '1';
 
 ---------- Image Parameters Write
 
@@ -1359,6 +1487,25 @@ begin
               next_state           <= start_multiboot_state;
               next_start_multiboot <= '1';
 
+---------- remote update                                                   
+            elsif regAddr = ru_start_cmd then
+              next_state               <= start_remote_update_state;
+              next_start_remote_update <= '1';
+
+            elsif regAddr = ru_bitstream_we_cmd then
+              if remote_update_fifo_full = '0' then
+                next_state                    <= remote_update_bitstrm_we_state;
+                next_remote_update_bitstrm_we <= '1';
+              else
+                next_state   <= error_state;
+                next_regFail <= '1';
+                next_regAck  <= '1';
+              end if;
+
+            elsif regAddr = ru_bitstream_daq_done_cmd then
+              next_state                  <= remote_update_daq_done_state;
+              next_remote_update_daq_done <= '1';
+
 ---------- ERROR                                                                                                        
             else
               next_state   <= error_state;
@@ -1367,8 +1514,6 @@ begin
             end if;
           end if;
         end if;
-
-
 
 
 
@@ -1387,7 +1532,7 @@ begin
       when hdl_version =>
         next_state     <= wait_end_cmd;
         next_regAck    <= '1';
-        next_regDataRd <= version_dev_level & LSST_SCI_VERSION & REB_vhdl_version;
+        next_regDataRd <= version_dev_level & x"1" & LSST_SCI_VERSION(7 downto 0) & REB_vhdl_version;
 --                      next_regDataRd                          <= version_dev_level & x"01E" & REB_vhdl_version;       
         -- SCI ID (add 2)
       when SCI_ID =>
@@ -1455,6 +1600,25 @@ begin
         next_regAck    <= '1';
         next_regDataRd <= trig_tm_value_seq(63 downto 32);
 
+        -- Sync command 0 delay
+      when sync_cmd_delay_rd_state =>
+        next_state     <= wait_end_cmd;
+        next_regAck    <= '1';
+        next_regDataRd <= x"000000"&sync_cmd_delay_read;
+
+        -- Sync command mask
+      when sync_cmd_mask_rd_state =>
+        next_state     <= wait_end_cmd;
+        next_regAck    <= '1';
+        next_regDataRd <= sync_cmd_mask_read;
+
+        -- interrupt mask read
+      when interrupt_mask_rd_state =>
+        next_state     <= wait_end_cmd;
+        next_regAck    <= '1';
+        next_regDataRd <= x"0000" & "00" & interrupt_mask_read;
+
+
 
         -- TRIGGER TIME READ V_I lsw  (add10)
       when trigger_time_V_I_lsw =>
@@ -1509,13 +1673,15 @@ begin
         next_regAck    <= '1';
         next_regDataRd <= x"0000000" & '0' & ccd_sel_read;
 
-
-
         -- status block read  
       when statusReg_rd =>
         next_state     <= wait_end_cmd;
         next_regDataRd <= statusReg;
         next_regAck    <= '1';
+
+        -- status block reset
+      when status_block_rst_state =>
+        next_state <= ack_del_1;
 
 ---------------------- BASE REGISTER SET WRITE  --------------------------
 
@@ -1529,6 +1695,19 @@ begin
 
         -- TRIGGER write (add 9)
       when trigger_state =>
+        next_state <= ack_del_1;
+
+        -- sync command 0 delay set
+      when sync_cmd_delay_wr_state =>
+        next_state <= ack_del_1;
+
+        -- sync command mask set
+      when sync_cmd_mask_wr_state =>
+        next_state <= ack_del_1;
+
+
+        -- interrupt mask set
+      when interrupt_mask_wr_state =>
         next_state <= ack_del_1;
 
 ---------------------- Image Parameters Write --------------------------
@@ -1598,8 +1777,6 @@ begin
         -- reset op code flag
       when seq_op_code_error_reset_state =>
         next_state <= ack_del_1;
-
-
 
         -- sequencer time memory read           
       when seq_func_time_rd =>
@@ -1726,7 +1903,6 @@ begin
       when set_aspic_nap_mode_state =>
         next_state <= ack_del_1;
 
-
 ---------------------- CCD clock rails DAC Write --------------------------
 
       when clk_rail_load_config_state =>
@@ -1742,6 +1918,13 @@ begin
 
       when c_bias_ldac_state =>
         next_state <= ack_del_1;
+
+        -- error and Voltage Under Threshold read
+      when c_bias_read_error_vut_state =>
+        next_state     <= wait_end_cmd;
+        next_regDataRd <= "0000" & x"00" & '0' & c_bias_v_undr_th & "0000" & x"00" & '0' & c_bias_dac_cmd_err;
+        next_regAck    <= '1';
+
 
 ---------------------- DREB voltage and current sensors --------------------------      
         -- V_HTR voltage
@@ -2188,7 +2371,7 @@ begin
 -- Back bias enable read        
       when back_bias_sw_read_state =>
         next_state     <= wait_end_cmd;
-        next_regDataRd <= X"0000000" & "00" & back_bias_cl_rb & back_bias_sw_rb;
+        next_regDataRd <= X"0000000" & '0' & back_bias_sw_error & back_bias_cl_rb & back_bias_sw_rb;
         next_regAck    <= '1';
 
         -- enable DC/DC clock
@@ -2200,6 +2383,27 @@ begin
       when start_multiboot_state =>
         next_state <= ack_del_1;
 
+---------------------- Remote Update --------------------------                             
+
+        -- start remote update
+      when start_remote_update_state =>
+        next_state <= ack_del_1;
+
+      when remote_update_bitstrm_we_state =>
+        next_state <= ack_del_1;
+
+      when remote_update_daq_done_state =>
+        next_state <= ack_del_1;
+
+      when remote_update_rd_status_state =>
+        next_state     <= wait_end_cmd;
+        next_regDataRd <= X"0000" & remote_update_status_reg;
+        next_regAck    <= '1';
+
+      when reboot_status_rd_state =>
+        next_state     <= wait_end_cmd;
+        next_regDataRd <= remote_update_reboot_status;
+        next_regAck    <= '1';
 
 ---------------------- WAIT END CMD  --------------------------
         
