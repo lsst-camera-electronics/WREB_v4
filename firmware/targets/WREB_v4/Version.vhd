@@ -23,9 +23,9 @@ package Version is
 -------------------------------------------------------------------------------
   -- 102c4000  Compiling WREB_v4 for DAQ v1
 
-  constant FPGA_VERSION_C : std_logic_vector(31 downto 0) := x"11324004";  -- MAKE_VERSION
+  constant FPGA_VERSION_C : std_logic_vector(31 downto 0) := x"11374004";  -- MAKE_VERSION
 
-  constant BUILD_STAMP_C : string := "WREB_v4: Vivado v2015.3 (x86_64) Built Mon Feb 25 18:22:52 CET 2019 by srusso";
+  constant BUILD_STAMP_C : string := "WREB_v4: Vivado v2015.3 (x86_64) Built Thu Feb 28 17:03:22 CET 2019 by srusso";
 
 end Version;
 
