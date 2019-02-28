@@ -14,8 +14,8 @@
 -- Modification history:
 -- 
 -------------------------------------------------------------------------------
-LIBRARY ieee;
-USE ieee.std_logic_1164.ALL;
+library ieee;
+use ieee.std_logic_1164.all;
 
 package Version is
 -------------------------------------------------------------------------------
@@ -23,9 +23,9 @@ package Version is
 -------------------------------------------------------------------------------
   -- 102c4000  Compiling WREB_v4 for DAQ v1
 
-  constant FPGA_VERSION_C : std_logic_vector(31 downto 0) := x"11324003"; -- MAKE_VERSION
+  constant FPGA_VERSION_C : std_logic_vector(31 downto 0) := x"11324004";  -- MAKE_VERSION
 
-constant BUILD_STAMP_C : string := "WREB_v4: Vivado v2015.3 (x86_64) Built Fri Oct 19 09:46:58 PDT 2018 by srusso";
+  constant BUILD_STAMP_C : string := "WREB_v4: Vivado v2015.3 (x86_64) Built Mon Feb 25 18:22:52 CET 2019 by srusso";
 
 end Version;
 
@@ -36,4 +36,6 @@ end Version;
 -- 4002 silver cable gpio cottected to sequencer_out(16) and CCD security
 -- 4003 solved a bug on ADC data handler that prevented the image transfer for
 -- a specific clk sequence multiboot feature included
+-- 4004 one wire interface rewritten, sync command and LAMs modules updated,
+-- sequencer start add now is set from sync cmd, step now is also a sync cmd
 -------------------------------------------------------------------------------
