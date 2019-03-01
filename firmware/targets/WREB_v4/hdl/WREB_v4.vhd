@@ -337,7 +337,7 @@ architecture Behavioral of WREB_v4 is
 
 -- interrupt commands
       interrupt_mask_wr_en : out std_logic;
-      interrupt_mask_read  : in  std_logic_vector(13 downto 0);
+      interrupt_mask_read  : in  std_logic_vector(31 downto 0);
 
 
 -- Image parameters
@@ -554,21 +554,21 @@ architecture Behavioral of WREB_v4 is
       );
   end component;
 
-
   component REB_interrupt_top
     generic (
-      edge_en : std_logic_vector(13 downto 0));
+      interrupt_bus_width : integer := 32);
+
     port (
       clk               : in  std_logic;
       reset             : in  std_logic;
-      interrupt_bus_in  : in  std_logic_vector(13 downto 0);
+      edge_en           : in  std_logic_vector(interrupt_bus_width-1 downto 0);
+      interrupt_bus_in  : in  std_logic_vector(interrupt_bus_width-1 downto 0);
       mask_bus_in_en    : in  std_logic;
-      mask_bus_in       : in  std_logic_vector(13 downto 0);
-      mask_bus_out      : out std_logic_vector(13 downto 0);
+      mask_bus_in       : in  std_logic_vector(interrupt_bus_width-1 downto 0);
+      mask_bus_out      : out std_logic_vector(interrupt_bus_width-1 downto 0);
       interrupt_en_out  : out std_logic;
-      interrupt_bus_out : out std_logic_vector(13 downto 0));
+      interrupt_bus_out : out std_logic_vector(interrupt_bus_width-1 downto 0));
   end component;
-
 
   component base_reg_set_top is
     port (
@@ -1049,11 +1049,12 @@ architecture Behavioral of WREB_v4 is
 --  signal sync_cmd_mask_read  : std_logic_vector(31 downto 0);
 
 -- iterrupt signals
-  signal interrupt_bus_in  : std_logic_vector(13 downto 0);
+  signal interrupt_bus_in  : std_logic_vector(31 downto 0);
   signal mask_bus_in_en    : std_logic;
-  signal mask_bus_out      : std_logic_vector(13 downto 0);
+  signal mask_bus_out      : std_logic_vector(31 downto 0);
   signal interrupt_en_out  : std_logic;
-  signal interrupt_bus_out : std_logic_vector(13 downto 0);
+  signal interrupt_bus_out : std_logic_vector(31 downto 0);
+  signal interrupt_edge_en : std_logic_vector(31 downto 0);
   signal fe_reset_notice   : std_logic;
 
   -- BRS signals
@@ -1358,7 +1359,10 @@ begin
   -- interrupt_bus_in <= "00" & x"0" & sequencer_outputs(31) & temp_busy & V_I_busy & dataEOT & dataSOT & sequencer_busy & sequencer_busy & fe_reset_notice;
 
   -- DAQ v36 and beyond
-  interrupt_bus_in <= "00" & x"0" & temp_busy & V_I_busy & fe_reset_notice & sequencer_outputs(31) & SCI_DataIn(0).eot & SCI_DataIn(0).sot & sequencer_busy & sequencer_busy;
+  interrupt_edge_en <= "00" & x"000" & "001" & "11101" & "11101" & "11101";
+  interrupt_bus_in  <= "00" & x"000" & temp_busy & V_I_busy & fe_reset_notice &
+                       x"00" & "00" &
+                       sequencer_outputs(31) & SCI_DataIn(0).eot & SCI_DataIn(0).sot & sequencer_busy & sequencer_busy;
 
   ASPIC_spi_mosi_ccd_1  <= ASPIC_mosi_int;
   ASPIC_spi_sclk_ccd_1  <= ASPIC_sclk_int;
@@ -1827,15 +1831,18 @@ begin
   -- for the iterrupt_bus_in
   -- edge_en is "00" &  x"0" & "10011011";
   
+  
   REB_interrupt_top_1 : REB_interrupt_top
     generic map (
-      edge_en => "00" & x"0" & "00111101")
+--      edge_en => "00" & x"0" & "00111101")
+      interrupt_bus_width => 32)
     port map (
       clk               => clk_100_Mhz,
       reset             => usrRst,
+      edge_en           => interrupt_edge_en,
       interrupt_bus_in  => interrupt_bus_in,
       mask_bus_in_en    => mask_bus_in_en,
-      mask_bus_in       => regDataWr_masked(13 downto 0),
+      mask_bus_in       => regDataWr_masked(31 downto 0),
       mask_bus_out      => mask_bus_out,
       interrupt_en_out  => interrupt_en_out,
       interrupt_bus_out => interrupt_bus_out);
