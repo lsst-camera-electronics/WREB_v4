@@ -22,6 +22,7 @@ use IEEE.STD_LOGIC_1164.all;
 use ieee.std_logic_misc.all;            -- for or_reduce
 use work.max_11046_top_package.all;
 use work.dual_ads1118_top_package.all;
+use work.LsstSciPackage.all;
 
 -- Uncomment the following library declaration if using
 -- arithmetic functions with Signed or Unsigned values
@@ -243,17 +244,22 @@ architecture Behavioral of WREB_v4 is
       -------------------------------------------------------------------------
       -- Data Encoder Interface
       -------------------------------------------------------------------------
-      DataWrEn : in std_logic;
-      DataSOT  : in std_logic;
-      DataEOT  : in std_logic;
-      DataIn   : in std_logic_vector(17 downto 0);
+      -- up to v32
+--DataWrEn : in std_logic;
+      --DataSOT  : in std_logic;
+      --DataEOT  : in std_logic;
+      --DataIn   : in std_logic_vector(17 downto 0);
+      -- version 36 and beyond
+      DataIn : in LsstSciImageDataArray(2 downto 0);
 
       -------------------------------------------------------------------------
       -- Notification Interface
       -------------------------------------------------------------------------
       NoticeEn : in std_logic;
-      -- Notice   : in std_logic_vector(13 downto 0);
-      Notice   : in std_logic_vector(15 downto 0);
+      --  up to v32
+      --Notice   : in std_logic_vector(15 downto 0);
+      -- version 37
+      Notice   : in std_logic_vector(59 downto 0);
 
       -------------------------------------------------------------------------
       -- Synchronous Command Interface
@@ -501,12 +507,12 @@ architecture Behavioral of WREB_v4 is
       start_multiboot : out std_logic;
 
 -- remote update
-          remote_update_fifo_full     : in  std_logic;
-          remote_update_status_reg    : in  std_logic_vector(15 downto 0);
-          remote_update_reboot_status : in  std_logic_vector(31 downto 0);
-          start_remote_update         : out std_logic;
-          remote_update_bitstrm_we    : out std_logic;
-          remote_update_daq_done      : out std_logic
+      remote_update_fifo_full     : in  std_logic;
+      remote_update_status_reg    : in  std_logic_vector(15 downto 0);
+      remote_update_reboot_status : in  std_logic_vector(31 downto 0);
+      start_remote_update         : out std_logic;
+      remote_update_bitstrm_we    : out std_logic;
+      remote_update_daq_done      : out std_logic
 
       );    
   end component;
@@ -967,10 +973,15 @@ architecture Behavioral of WREB_v4 is
   signal regFail    : std_logic;
   signal RegDataRd  : std_logic_vector(31 downto 0);
   signal RegWrEn    : std_logic_vector(31 downto 0);
-  signal dataWrEn   : std_logic;
-  signal dataSOT    : std_logic;
-  signal dataEOT    : std_logic;
-  signal image_in   : std_logic_vector(17 downto 0);
+  --DAQ v32
+  --signal dataWrEn   : std_logic;
+  --signal dataSOT    : std_logic;
+  --signal dataEOT    : std_logic;
+  --signal image_in   : std_logic_vector(17 downto 0);
+  -- DAQ v36 and beyond
+  signal SCI_DataIn : LsstSciImageDataArray(2 downto 0);
+
+
   signal StatusAddr : std_logic_vector(23 downto 0);
   signal StatusReg  : std_logic_vector(31 downto 0);
   signal StatusRst  : std_logic;
@@ -1287,7 +1298,7 @@ begin
 -- temperature signals
   temp_busy <= DREB_temp_busy or REB_temp_busy_gr1;
 
-  interrupt_bus_in <= "00" & x"0" & sequencer_outputs(31) & temp_busy & V_I_busy & dataEOT & dataSOT & sequencer_busy & sequencer_busy & fe_reset_notice;
+--  interrupt_bus_in <= "00" & x"0" & sequencer_outputs(31) & temp_busy & V_I_busy & dataEOT & dataSOT & sequencer_busy & sequencer_busy & fe_reset_notice;
 
 
   ASPIC_spi_mosi_ccd_1  <= ASPIC_mosi_int;
@@ -1442,17 +1453,20 @@ begin
       -------------------------------------------------------------------------
       -- Data Encoder Interface
       -------------------------------------------------------------------------
-      DataWrEn  => dataWrEn,
-      DataSOT   => dataSOT,
-      DataEOT   => dataEOT,
-      DataIn    => image_in,
+      -- DAQ v32
+      --DataWrEn  => dataWrEn,
+      --DataSOT   => dataSOT,
+      --DataEOT   => dataEOT,
+      --DataIn    => image_in,
+      -- DAQ v36 and beyond
+      DataIn    => SCI_DataIn,
 
       -------------------------------------------------------------------------
       -- Notification Interface
       -------------------------------------------------------------------------
       NoticeEn => interrupt_en_out,
       -- Notice   => interrupt_bus_out,
-      Notice   => x"0000",
+      Notice   => (others => '0'),
 
       -------------------------------------------------------------------------
       -- Synchronous Command Interface
@@ -1787,30 +1801,37 @@ begin
 
   Image_data_handler_0 : ADC_data_handler_v4
     port map (
-      reset             => sync_res,
-      clk               => clk_100_Mhz,
-      testmode_rst      => pattern_reset,
-      testmode_col      => sequencer_outputs(8),
-      start_of_img      => start_of_img,  -- this signal is generated by the user (using the sequencer) and has to arrive before the first trigger 
-      end_of_img        => end_of_img,  -- this signal is generated by the user (using the sequencer) and has to arrive after the last  ADC trasfer 
-      end_sequence      => end_sequence,  -- this signal is the end of sequence generated by the sequencer and is used as a timeot to generate EOF.
-      trigger           => ADC_trigger,  -- this signal start the operations (ADC conv and send data to PGP)
-      en_test_mode      => image_patter_en,  -- register enable for pattern test mode
-      test_mode_in      => regDataWr_masked(0),  -- test mode in 
-      en_load_ccd_sel   => '1',  -- for GREB only two stripes are active  register enable for CCD enable
-      ccd_sel_in        => "001",    -- for WREB only first stripe is active 
-      ccd_sel_out       => CCD_sel,  -- register to select which CCD to acquire (1, 2 or 3) 
-      SOT               => dataSOT,     -- Start of Image
-      EOT               => dataEOT,     -- End of Image
-      write_enable      => dataWrEn,    -- signal to write the image in the PGP
+      reset           => sync_res,
+      clk             => clk_100_Mhz,
+      testmode_rst    => pattern_reset,
+      testmode_col    => sequencer_outputs(8),
+      start_of_img    => start_of_img,  -- this signal is generated by the user (using the sequencer) and has to arrive before the first trigger 
+      end_of_img      => end_of_img,  -- this signal is generated by the user (using the sequencer) and has to arrive after the last  ADC trasfer 
+      end_sequence    => end_sequence,  -- this signal is the end of sequence generated by the sequencer and is used as a timeot to generate EOF.
+      trigger         => ADC_trigger,  -- this signal start the operations (ADC conv and send data to PGP)
+      en_test_mode    => image_patter_en,  -- register enable for pattern test mode
+      test_mode_in    => regDataWr_masked(0),  -- test mode in 
+      en_load_ccd_sel => '1',  -- for GREB only two stripes are active  register enable for CCD enable
+      ccd_sel_in      => "001",    -- for WREB only first stripe is active 
+      ccd_sel_out     => CCD_sel,  -- register to select which CCD to acquire (1, 2 or 3) 
+-- DAQ v32
+      --SOT               => dataSOT,     -- Start of Image
+      --EOT               => dataEOT,     -- End of Image
+      --write_enable      => dataWrEn,    -- signal to write the image in the PGP
+      -- data_out          => image_in,    -- 18 bits ADC word
+      -- DAQ v36 and beyond
+      SOT             => SCI_DataIn(0).sot,   -- Start of Image
+      EOT             => SCI_DataIn(0).eot,   -- End of Image
+      write_enable    => SCI_DataIn(0).wrEn,  -- signal to write the image in the PGP
+      data_out        => SCI_DataIn(0).data,
+
       test_mode_enb_out => image_patter_read,
-      data_out          => image_in,    -- 18 bits ADC word 
-      adc_data_ccd_1    => adc_data_ccd_1,   -- CCD ADC data 
-      adc_cnv_ccd_1     => adc_cnv_ccd_1_int,    -- ADC conv
-      adc_sck_ccd_1     => adc_sck_ccd_1_int,    -- ADC serial clock
-      adc_data_ccd_2    => x"0000",     -- CCD ADC data 
-      adc_cnv_ccd_2     => open,        -- ADC conv
-      adc_sck_ccd_2     => open,        -- ADC serial clock
+      adc_data_ccd_1    => adc_data_ccd_1,     -- CCD ADC data 
+      adc_cnv_ccd_1     => adc_cnv_ccd_1_int,  -- ADC conv
+      adc_sck_ccd_1     => adc_sck_ccd_1_int,  -- ADC serial clock
+      adc_data_ccd_2    => x"0000",            -- CCD ADC data 
+      adc_cnv_ccd_2     => open,               -- ADC conv
+      adc_sck_ccd_2     => open,               -- ADC serial clock
       adc_data_ccd_3    => x"0000",  -- for GREB only first stripe is active                                 -- CCD ADC data 
       adc_cnv_ccd_3     => open,  -- for GREB only first stripe is active                         -- ADC conv
       adc_sck_ccd_3     => open  -- for GREB only first stripe is active                         -- ADC serial clock
