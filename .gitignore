@@ -8,6 +8,9 @@
 *.log
 
 #build directory
-build
-old
-old_old
+#
+./build
+./old
+./old_old
+firmware/modules/LSST_common/lsst_sim/firmware_old
+
