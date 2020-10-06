@@ -23,9 +23,9 @@ package Version is
 -------------------------------------------------------------------------------
   -- 102c4000  Compiling WREB_v4 for DAQ v1
 
-  constant FPGA_VERSION_C : std_logic_vector(31 downto 0) := x"11384004";  -- MAKE_VERSION
+  constant FPGA_VERSION_C : std_logic_vector(31 downto 0) := x"11384005";  -- MAKE_VERSION
 
-  constant BUILD_STAMP_C : string := "WREB_v4: Vivado v2015.3 (x86_64) Built Wed Oct 23 12:29:02 PDT 2019 by srusso";
+  constant BUILD_STAMP_C : string := "WREB_v4: Vivado v2015.3 (x86_64) Built Tue Oct  6 12:12:28 CEST 2020 by srusso";
 
 end Version;
 
@@ -38,4 +38,6 @@ end Version;
 -- a specific clk sequence multiboot feature included
 -- 4004 one wire interface rewritten, sync command and LAMs modules updated,
 -- sequencer start add now is set from sync cmd, step now is also a sync cmd
+-- 4005 look at me various fixes (masked at start and other errors). Now the
+-- version shuld be identical to GREB 2007 and following 
 -------------------------------------------------------------------------------
