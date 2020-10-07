@@ -2,6 +2,14 @@
 *.vhd~
 *.xdc~
 .gitignore~
+*.do~
+#simulation 
+*.wlf
+firmware/modules/LSST_common/look_at_me/rtl/TB/transcript
+firmware/modules/LSST_common/look_at_me/rtl/TB/work/
+#images compressed
+*.bit.gz
+*.mcs.gz
 
 #vivado files
 *.jou
@@ -9,8 +17,14 @@
 
 #build directory
 #
-./build
-./old
-./old_old
+firmware/build
+firmware/modules/LSST_common/lsst_sim/firmware/modules/StdLib/build/
+firmware/modules/LSST_common/lsst_sim/firmware_old_from_myvivado/modules/StdLib/build/
+firmware/modules/commonlib-v32/StdLib/build/
+firmware/modules/LSST_common/look_at_me_old/
+firmware/modules/old/
+firmware/modules/old_old/
 firmware/modules/LSST_common/lsst_sim/firmware_old
+firmware/modules/StdLib/build/
+
 
