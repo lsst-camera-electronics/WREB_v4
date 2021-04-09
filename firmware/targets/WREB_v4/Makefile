@@ -75,10 +75,6 @@ export MODULE_DIRS = $(PROJ_DIR)/../../modules/LSST_common/ADC_data_handler_v4 \
 include ../../modules/StdLib/build/system_vivado_v1.mk
 
 
-
-# Use top level makefile
-include ../../modules/StdLib/build/system_vivado_v1.mk
-
 ###############################################################
 #### multiboot #####################################################
 ###############################################################
