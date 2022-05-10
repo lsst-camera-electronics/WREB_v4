@@ -23,9 +23,9 @@ package Version is
 -------------------------------------------------------------------------------
   -- 102c4000  Compiling WREB_v4 for DAQ v1
 
-  constant FPGA_VERSION_C : std_logic_vector(31 downto 0) := x"11394005";  -- MAKE_VERSION
+  constant FPGA_VERSION_C : std_logic_vector(31 downto 0) := x"11394006";  -- MAKE_VERSION
 
-  constant BUILD_STAMP_C : string := "WREB_v4: Vivado v2015.3 (x86_64) Built Fri Dec 11 14:04:46 CET 2020 by srusso";
+  constant BUILD_STAMP_C : string := "WREB_v4: Vivado v2018.3 (x86_64) Built Tue May 10 16:34:55 PDT 2022 by jgt";
 
 end Version;
 
@@ -40,4 +40,6 @@ end Version;
 -- sequencer start add now is set from sync cmd, step now is also a sync cmd
 -- 4005 look at me various fixes (masked at start and other errors). Now the
 -- version shuld be identical to GREB 2007 and following 
+-- 4006 Added STOP Synchronous command 0x30
+--      Fixed bug that caused 160ns of 0 on output when entering default state
 -------------------------------------------------------------------------------
