@@ -23,9 +23,9 @@ package Version is
 -------------------------------------------------------------------------------
   -- 102c4000  Compiling WREB_v4 for DAQ v1
 
-  constant FPGA_VERSION_C : std_logic_vector(31 downto 0) := x"11394007";  -- MAKE_VERSION
+  constant FPGA_VERSION_C : std_logic_vector(31 downto 0) := x"113B4008";  -- MAKE_VERSION
 
-  constant BUILD_STAMP_C : string := "WREB_v4: Vivado v2018.3 (x86_64) Built Wed Jul 27 14:14:57 PDT 2022 by jgt";
+  constant BUILD_STAMP_C : string := "WREB_v4: Vivado v2018.3 (x86_64) Built Tue Apr 25 13:37:04 PDT 2023 by jgt";
 
 end Version;
 
@@ -43,4 +43,5 @@ end Version;
 -- 4006 Added STOP Synchronous command 0x30
 --      Fixed bug that caused 160ns of 0 on output when entering default state
 -- 4007 Added register START command that specifies MAIN
+-- 4008 Added version number to bitfile
 -------------------------------------------------------------------------------
