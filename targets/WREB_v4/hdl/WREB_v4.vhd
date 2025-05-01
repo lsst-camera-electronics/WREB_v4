@@ -397,6 +397,9 @@ architecture Behavioral of WREB_v4 is
       c_bias_v_undr_th   : in  std_logic_vector(2 downto 0);
       c_bias_load_start  : out std_logic;
       c_bias_ldac_start  : out std_logic;
+      bias_gd_thresh     : in std_logic_vector(11 downto 0);
+      bias_od_thresh     : in std_logic_vector(11 downto 0);
+      bias_rd_thresh     : in std_logic_vector(11 downto 0);
 
 -- DREB voltage and current sensors
       error_V_HTR_voltage   : in std_logic;
@@ -734,7 +737,11 @@ architecture Behavioral of WREB_v4 is
       mosi            : out std_logic;
       ss              : out std_logic;
       sclk            : out std_logic;
-      ldac            : out std_logic);
+      ldac            : out std_logic;
+    gd_thresh       : out std_logic_vector(11 downto 0);
+      od_thresh       : out std_logic_vector(11 downto 0);
+    rd_thresh       : out std_logic_vector(11 downto 0)
+      );
   end component;
 
   component dual_ad53xx_DAC_top is
@@ -1168,6 +1175,10 @@ architecture Behavioral of WREB_v4 is
   signal c_bias_v_undr_th   : std_logic_vector(2 downto 0);
   signal c_bias_load_start  : std_logic;
   signal c_bias_ldac_start  : std_logic;
+
+  signal bias_gd_thresh     : std_logic_vector(11 downto 0);
+  signal bias_od_thresh     : std_logic_vector(11 downto 0);
+  signal bias_rd_thresh     : std_logic_vector(11 downto 0);
 
 -- ltc2945 V & I sensors read
   signal V_I_read_start        : std_logic;
@@ -1666,6 +1677,10 @@ begin
       c_bias_v_undr_th      => c_bias_v_undr_th,
       c_bias_load_start     => c_bias_load_start,
       c_bias_ldac_start     => c_bias_ldac_start,
+      bias_gd_thresh        => bias_gd_thresh,
+      bias_od_thresh        => bias_od_thresh,
+      bias_rd_thresh        => bias_rd_thresh,
+
 -- DREB voltage and current sensors
       error_V_HTR_voltage   => error_V_HTR_voltage,
       V_HTR_voltage         => V_HTR_voltage,
@@ -2020,7 +2035,10 @@ begin
       mosi            => din_C_BIAS,
       ss              => sync_C_BIAS,
       sclk            => sclk_C_BIAS,
-      ldac            => ldac_C_BIAS
+      ldac            => ldac_C_BIAS,
+      gd_thresh       => bias_gd_thresh,
+      od_thresh       => bias_od_thresh,
+      rd_thresh       => bias_rd_thresh
       );
 
   clk_rails_DAC : dual_ad53xx_DAC_top

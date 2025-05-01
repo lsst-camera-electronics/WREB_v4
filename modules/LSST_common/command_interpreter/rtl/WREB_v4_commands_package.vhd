@@ -105,6 +105,10 @@ package WREB_v4_commands_package is
   constant c_bias_ldac_ccd2_cmd   : std_logic_vector(23 downto 0) := x"400102";
   constant c_bias_err_vut_cmd       : std_logic_vector(23 downto 0) := x"40010F";
 
+  constant gd_thresh_read_cmd : std_logic_vector(23 downto 0) := x"401100";
+  constant od_thresh_read_cmd : std_logic_vector(23 downto 0) := x"401105";
+  constant rd_thresh_read_cmd : std_logic_vector(23 downto 0) := x"401101";
+
 ---------- DREB voltage and current sensors
   constant V_DREB_voltage_cmd  : std_logic_vector(23 downto 0) := x"600000";
   constant V_DREB_current_cmd  : std_logic_vector(23 downto 0) := x"600001";

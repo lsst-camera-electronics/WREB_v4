@@ -142,6 +142,9 @@ entity wreb_v4_cmd_interpeter is
         c_bias_v_undr_th   : in  std_logic_vector(2 downto 0);
         c_bias_load_start  : out std_logic;
         c_bias_ldac_start  : out std_logic;
+        bias_gd_thresh     : in std_logic_vector(11 downto 0);
+		bias_od_thresh     : in std_logic_vector(11 downto 0);
+		bias_rd_thresh     : in std_logic_vector(11 downto 0);
 
 -- DREB voltage and current sensors
         error_V_HTR_voltage   : in std_logic;
@@ -313,6 +316,7 @@ architecture Behavioral of wreb_v4_cmd_interpeter is
 
 -- CABAC bias DAC       
                       c_bias_load_config_state, c_bias_ldac_state, c_bias_read_error_vut_state,
+                      gd_thresh_read_state, od_thresh_read_state, rd_thresh_read_state, 
 
 
 -- DREB voltage and current sensors
@@ -1016,6 +1020,15 @@ begin
 
             elsif regAddr = c_bias_err_vut_cmd then
               next_state <= c_bias_read_error_vut_state;
+
+            elsif regAddr = gd_thresh_read_cmd then
+              next_state <= gd_thresh_read_state;
+
+            elsif regAddr = od_thresh_read_cmd then
+              next_state <= od_thresh_read_state;
+
+            elsif regAddr = rd_thresh_read_cmd then
+              next_state <= rd_thresh_read_state;
 
                                         --------REB voltage and current sensors read                           
                                         -- V_HTR voltage read
@@ -1925,6 +1938,18 @@ begin
         next_regDataRd <= "0000" & x"00" & '0' & c_bias_v_undr_th & "0000" & x"00" & '0' & c_bias_dac_cmd_err;
         next_regAck    <= '1';
 
+      when gd_thresh_read_state =>
+      	next_state     <= wait_end_cmd;
+      	next_regDataRd <= x"0000" & x"0" & bias_gd_thresh;
+      	next_regAck    <= '1';
+      when od_thresh_read_state =>
+      	next_state     <= wait_end_cmd;
+      	next_regDataRd <= x"0000" & x"0" & bias_od_thresh;
+      	next_regAck    <= '1';
+      when rd_thresh_read_state =>
+      	next_state     <= wait_end_cmd;
+      	next_regDataRd <= x"0000" & x"0" & bias_rd_thresh;
+      	next_regAck    <= '1';
 
 ---------------------- DREB voltage and current sensors --------------------------      
       -- V_HTR voltage
