@@ -23,9 +23,9 @@ package Version is
 -------------------------------------------------------------------------------
   -- 102c4000  Compiling WREB_v4 for DAQ v1
 
-  constant FPGA_VERSION_C : std_logic_vector(31 downto 0) := x"11394008";  -- MAKE_VERSION
+  constant FPGA_VERSION_C : std_logic_vector(31 downto 0) := x"11394009";  -- MAKE_VERSION
 
-  constant BUILD_STAMP_C : string := "WREB_v4: Vivado v2018.3 (x86_64) Built Wed Apr 26 09:17:39 PDT 2023 by jgt";
+  constant BUILD_STAMP_C : string := "WREB_v4: Vivado v2018.3 (x86_64) Built Wed Apr 30 18:11:10 PDT 2025 by jgt";
 
 end Version;
 
@@ -44,4 +44,5 @@ end Version;
 --      Fixed bug that caused 160ns of 0 on output when entering default state
 -- 4007 Added register START command that specifies MAIN
 -- 4008 Added version number to bitfile
+-- 4009 Added readback of sensor bias thresholds
 -------------------------------------------------------------------------------
