@@ -18,7 +18,8 @@ use lsst_reb.basic_elements_pkg.all;
 entity wreb_v4_cmd_interpreter is
   generic (
     VERSION_G        : RebVersionType;
-    NUM_SEQUENCERS_G : integer
+    NUM_SEQUENCERS_G : integer;
+    CLK_PERIOD_G     : real
   );
   port (
     reset : in    std_logic;
@@ -231,7 +232,7 @@ architecture Behavioral of wreb_v4_cmd_interpreter is
 
     -- BRS states
     schema, hdl_version, SCI_ID, reserved_1, time_base_read_lsw, time_base_read_MSW,
-    reserved_2, reserved_3, state_busy, trigger_time_SB_lsw, trigger_time_SB_MSW,
+    reserved_2, reserved_3, sys_clock_rate, state_busy, trigger_time_SB_lsw, trigger_time_SB_MSW,
     trigger_time_TB_lsw, trigger_time_TB_MSW, trigger_time_seq_lsw, trigger_time_seq_MSW,
     trigger_time_V_I_lsw, trigger_time_V_I_MSW, trigger_time_pcb_t_lsw, trigger_time_pcb_t_MSW,
 
@@ -809,6 +810,10 @@ begin
             -- reserved 3
             elsif (regAddr = read_reserved_3_cmd) then
               next_state <= reserved_3;
+
+            -- sys_clock_rate
+            elsif (regAddr = sys_clock_rate_cmd) then
+              next_state <= sys_clock_rate;
 
             -- read busy state
             elsif (regAddr = read_state_busy_cmd) then
@@ -1514,6 +1519,13 @@ begin
         next_state     <= wait_end_cmd;
         next_regAck    <= '1';
         next_regDataRd <= busy_bus;
+
+      -- sys_clock_rate
+      when sys_clock_rate =>
+
+        next_state     <= wait_end_cmd;
+        next_regAck    <= '1';
+        next_regDataRd <= std_logic_vector(to_unsigned(integer(CLK_PERIOD_G*1.0E12),32));
 
       -- TRIGGER TIME READ SB lsw  (addA)
       when trigger_time_SB_lsw =>

@@ -23,6 +23,7 @@ entity WREB_v4 is
     PgpTx_P : out   std_logic_vector(1 downto 0);
     PgpTx_M : out   std_logic_vector(1 downto 0);
 
+    ------ CCD -----
     -- CCD ADC
     adc_data_ccd    : in    Slv16Array(NUM_SENSORS_C-1 downto 0);
     adc_cnv_ccd     : out   std_logic_vector(NUM_SENSORS_C-1 downto 0);
@@ -38,6 +39,17 @@ entity WREB_v4 is
     ASPIC_clamp_ccd_n  : out   std_logic_vector(NUM_SENSORS_C-1 downto 0);
     ASPIC_reset_ccd_p  : out   std_logic_vector(NUM_SENSORS_C-1 downto 0);
     ASPIC_reset_ccd_n  : out   std_logic_vector(NUM_SENSORS_C-1 downto 0);
+    ASPIC_nap_ccd      : out   std_logic_vector(NUM_SENSORS_C-1 downto 0);
+
+
+    -- ASPIC control signals
+    ASPIC_spi_miso_t_ccd    : in    std_logic_vector(NUM_SENSORS_C-1 downto 0);
+    ASPIC_spi_miso_b_ccd    : in    std_logic_vector(NUM_SENSORS_C-1 downto 0);
+    ASPIC_ss_t_ccd      : out   std_logic_vector(NUM_SENSORS_C-1 downto 0);
+    ASPIC_ss_b_ccd      : out   std_logic_vector(NUM_SENSORS_C-1 downto 0);
+    ASPIC_spi_reset_ccd : out   std_logic_vector(NUM_SENSORS_C-1 downto 0);
+    ASPIC_spi_sclk_ccd      : out   std_logic_vector(NUM_SENSORS_C-1 downto 0);
+    ASPIC_spi_mosi_ccd      : out   std_logic_vector(NUM_SENSORS_C-1 downto 0);
 
     -- CCD Clocks signals
     par_clk_ccd_p    : out   Slv4Array(NUM_SENSORS_C-1 downto 0);
@@ -46,17 +58,6 @@ entity WREB_v4 is
     ser_clk_ccd_n    : out   Slv3Array(NUM_SENSORS_C-1 downto 0);
     reset_gate_ccd_p : out   std_logic_vector(NUM_SENSORS_C-1 downto 0);
     reset_gate_ccd_n : out   std_logic_vector(NUM_SENSORS_C-1 downto 0);
-
-    ---- ASPICs SPI link ----
-    -- ASPIC control signals
-    ASPIC_spi_mosi_ccd   : out   std_logic_vector(NUM_SENSORS_C-1 downto 0);
-    ASPIC_spi_sclk_ccd   : out   std_logic_vector(NUM_SENSORS_C-1 downto 0);
-    ASPIC_spi_miso_t_ccd : in    std_logic_vector(NUM_SENSORS_C-1 downto 0);
-    ASPIC_spi_miso_b_ccd : in    std_logic_vector(NUM_SENSORS_C-1 downto 0);
-    ASPIC_ss_t_ccd       : out   std_logic_vector(NUM_SENSORS_C-1 downto 0);
-    ASPIC_ss_b_ccd       : out   std_logic_vector(NUM_SENSORS_C-1 downto 0);
-    ASPIC_spi_reset_ccd  : out   std_logic_vector(NUM_SENSORS_C-1 downto 0);
-    ASPIC_nap_ccd        : out   std_logic_vector(NUM_SENSORS_C-1 downto 0);
 
     -- backbias sw
     backbias_clamp : out   std_logic;
@@ -99,9 +100,9 @@ entity WREB_v4 is
     sync_RAILS_dac  : out   std_logic_vector(1 downto 0);
 
     -- CCD BIAS
-    sync_C_BIAS : out   std_logic_vector(NUM_SENSORS_C-1 downto 0);
     ldac_C_BIAS : out   std_logic;
     din_C_BIAS  : out   std_logic;
+    sync_C_BIAS : out   std_logic_vector(NUM_SENSORS_C-1 downto 0);
     sclk_C_BIAS : out   std_logic;
 
     -- max 11056 slow adc
@@ -163,6 +164,7 @@ architecture Behavioral of WREB_v4 is
 
   constant TARGET_CONFIG : RebConfigType := (
     numSequencers => 1,
+    sysClkPer     => 10.0E-9,
     gdAddr        => x"0",
     odAddr        => x"5",
     rdAddr        => x"1",
@@ -175,7 +177,7 @@ architecture Behavioral of WREB_v4 is
   constant VERSION : RebVersionType := (
     schema        => x"00000000",
     board_type    => x"1",
-    vhdl_version  => x"400B",
+    vhdl_version  => x"400C",
     reserved_1    => x"00000000",
     reserved_2    => x"00000000",
     reserved_3    => x"00000000"
@@ -208,20 +210,20 @@ begin
       ASPIC_clamp_ccd_n          => ASPIC_clamp_ccd_n,
       ASPIC_reset_ccd_p          => ASPIC_reset_ccd_p,
       ASPIC_reset_ccd_n          => ASPIC_reset_ccd_n,
+      ASPIC_nap_ccd              => ASPIC_nap_ccd,
+      ASPIC_spi_miso_t_ccd           => ASPIC_spi_miso_t_ccd,
+      ASPIC_spi_miso_b_ccd           => ASPIC_spi_miso_b_ccd,
+      ASPIC_ss_t_ccd             => ASPIC_ss_t_ccd,
+      ASPIC_ss_b_ccd             => ASPIC_ss_b_ccd,
+      ASPIC_spi_reset_ccd        => ASPIC_spi_reset_ccd,
+      ASPIC_spi_sclk_ccd             => ASPIC_spi_sclk_ccd,
+      ASPIC_spi_mosi_ccd             => ASPIC_spi_mosi_ccd,
       par_clk_ccd_p              => par_clk_ccd_p,
       par_clk_ccd_n              => par_clk_ccd_n,
       ser_clk_ccd_p              => ser_clk_ccd_p,
       ser_clk_ccd_n              => ser_clk_ccd_n,
       reset_gate_ccd_p           => reset_gate_ccd_p,
       reset_gate_ccd_n           => reset_gate_ccd_n,
-      ASPIC_spi_mosi_ccd         => ASPIC_spi_mosi_ccd,
-      ASPIC_spi_sclk_ccd         => ASPIC_spi_sclk_ccd,
-      ASPIC_spi_miso_t_ccd       => ASPIC_spi_miso_t_ccd,
-      ASPIC_spi_miso_b_ccd       => ASPIC_spi_miso_b_ccd,
-      ASPIC_ss_t_ccd             => ASPIC_ss_t_ccd,
-      ASPIC_ss_b_ccd             => ASPIC_ss_b_ccd,
-      ASPIC_spi_reset_ccd        => ASPIC_spi_reset_ccd,
-      ASPIC_nap_ccd              => ASPIC_nap_ccd,
       backbias_clamp             => backbias_clamp,
       backbias_ssbe              => backbias_ssbe,
       pulse_ccd_p                => pulse_ccd_p,
@@ -244,9 +246,9 @@ begin
       din_RAILS                  => din_RAILS,
       sclk_RAILS                 => sclk_RAILS,
       sync_RAILS_dac             => sync_RAILS_dac,
-      sync_C_BIAS                => sync_C_BIAS,
-      din_C_BIAS                 => din_C_BIAS,
       ldac_C_BIAS                => ldac_C_BIAS,
+      din_C_BIAS                 => din_C_BIAS,
+      sync_C_BIAS                => sync_C_BIAS,
       sclk_C_BIAS                => sclk_C_BIAS,
       ck_adc_EOC                 => ck_adc_EOC,
       ccd_adc_EOC                => ccd_adc_EOC,

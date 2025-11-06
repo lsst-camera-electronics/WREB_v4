@@ -18,18 +18,9 @@ package WREB_v4_pkg is
     reserved_3   : std_logic_vector(31 downto 0);
   end record RebVersionType;
 
-  -- this will get removed
-  constant GREB_VERSION_C : RebVersionType := (
-    schema        => x"00000000",
-    board_type    => x"1",
-    vhdl_version  => x"400B",
-    reserved_1    => x"00000000",
-    reserved_2    => x"00000000",
-    reserved_3    => x"00000000"
-  );
-
   type RebConfigType is record
     numSequencers : integer range 1 to NUM_SENSORS_C;
+    sysClkPer     : real;
     gdAddr        : std_logic_vector(3 downto 0);
     odAddr        : std_logic_vector(3 downto 0);
     rdAddr        : std_logic_vector(3 downto 0);
@@ -38,15 +29,16 @@ package WREB_v4_pkg is
     rdThresh      : IntegerArray(0 to NUM_SENSORS_C-1);
   end record RebConfigType;
 
-  constant GREB_CONFIG_DEFAULT_C : RebConfigType := (
+  constant WREB_CONFIG_DEFAULT_C : RebConfigType := (
     numSequencers => 1,
-    gdAddr   => x"0",
-    odAddr   => x"5",
-    rdAddr   => x"1",
-    gdThresh => (0 => 1138),
-    odThresh => (0 => 2275),
-    rdThresh => (0 => 1632)
-    --    Sensor(        0)
+    sysClkPer     => 10.0E-9, -- 100MHz=10ns, 156.25=6.4ns
+    gdAddr        => x"0",
+    odAddr        => x"5",
+    rdAddr        => x"1",
+    gdThresh      => (0 => 1138),
+    odThresh      => (0 => 2275),
+    rdThresh      => (0 => 1632)
+    --         Sensor(        0)
   );
 
 end package WREB_v4_pkg;
