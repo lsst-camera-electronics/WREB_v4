@@ -302,7 +302,7 @@ architecture Behavioral of WREB_v4_base is
   signal ASPIC_spi_reset_int  : std_logic_vector(NUM_SENSORS_C-1 downto 0);
   signal ASPIC_ss_t_ccd_int   : std_logic_vector(NUM_SENSORS_C-1 downto 0);
   signal ASPIC_ss_b_ccd_int   : std_logic_vector(NUM_SENSORS_C-1 downto 0);
-  signal ASPIC_spi_miso_ccd       : std_logic_vector(NUM_SENSORS_C-1 downto 0);
+  signal ASPIC_spi_miso_ccd   : std_logic_vector(NUM_SENSORS_C-1 downto 0);
   signal ASPIC_miso_sel_ccd   : std_logic_vector(NUM_SENSORS_C-1 downto 0);
 
   signal aspic_nap_mode_en    : std_logic;
@@ -379,7 +379,7 @@ architecture Behavioral of WREB_v4_base is
   signal T4_reb_gr_error  : std_logic_vector(NUM_SENSORS_C-1 downto 0);
 
   -- ASPIC temp and voltage monitor
-  signal aspic_t_v_data    : array432;
+  signal aspic_t_v_data    : Slv16Array(7 downto 0);
   signal aspic_t_v_busy    : std_logic;
   signal aspic_t_v_start_r : std_logic;
 
@@ -469,7 +469,7 @@ architecture Behavioral of WREB_v4_base is
   signal gpio_1_int : std_logic;
 
   signal aspic_t_v_mosi_int   : std_logic;
-  signal aspic_t_v_ss_ccd_int : std_logic_vector(NUM_SENSORS_C-1 downto 0);
+  signal aspic_t_v_ss_ccd_int : std_logic_vector(1 downto 0);
   signal aspic_t_v_sclk_int   : std_logic;
 
   constant TPD_C : time := 1 ns;
@@ -530,13 +530,12 @@ begin
   --                       ASPIC_miso_b_ccd;
 
 
-  ASPIC_spi_miso_ccd <= (ASPIC_spi_miso_t_ccd and ASPIC_ss_t_ccd_int) or (ASPIC_spi_miso_b_ccd and ASPIC_ss_b_ccd_int);
 
-  ASPIC_spi_reset_ccd <= ASPIC_spi_reset_int;
   ASPIC_nap_ccd       <= aspic_nap_mode_ccd; -- nap mode activated =1
-
-  ASPIC_ss_t_ccd <= ASPIC_ss_t_ccd_int;
-  ASPIC_ss_b_ccd <= ASPIC_ss_b_ccd_int;
+  ASPIC_spi_reset_ccd <= ASPIC_spi_reset_int;
+  ASPIC_spi_miso_ccd  <= (ASPIC_spi_miso_t_ccd and ASPIC_ss_t_ccd_int) or (ASPIC_spi_miso_b_ccd and ASPIC_ss_b_ccd_int);
+  ASPIC_ss_t_ccd      <= ASPIC_ss_t_ccd_int;
+  ASPIC_ss_b_ccd      <= ASPIC_ss_b_ccd_int;
 
   ------------ assignment for test ------------
   gpio_0_int   <= sequencer_outputs(0).pattern_reset;
@@ -553,9 +552,9 @@ begin
 
   reb_sn_onewire <= reb_sn_onewire_int;
 
-  aspic_t_v_mosi   <= aspic_t_v_mosi_int;
-  aspic_t_v_ss_ccd <= aspic_t_v_ss_ccd_int;
-  aspic_t_v_sclk   <= aspic_t_v_sclk_int;
+  aspic_t_v_mosi      <= aspic_t_v_mosi_int;
+  aspic_t_v_ss_ccd(0) <= aspic_t_v_ss_ccd_int(0);
+  aspic_t_v_sclk      <= aspic_t_v_sclk_int;
 
   adc_cnv_ccd  <= adc_cnv_int;
   adc_sck_ccd  <= adc_sck_int;
@@ -1189,22 +1188,18 @@ begin
   end generate temp_rd_gr_generate;
 
 
-  -- It turns out this doesn't work and never has.
-  -- I will want to develop the new one on GREB, though
-  -- because it has 2 sensors.
   dual_ads1118_top_0 : entity lsst_reb.dual_ads1118_top
-    --generic map (
-    --  CLK_PERIOD_G => cfg.sysClkPer
-    --)
+    generic map (
+      CLK_PERIOD_G => cfg.sysClkPer
+    )
     port map (
       clk           => sys_clk,
       reset         => sys_rst,
       start_read    => aspic_t_v_start_r,
-      device_select => '0',
+      device_select => regDataWr_masked(0),
       miso          => aspic_t_v_miso,
       mosi          => aspic_t_v_mosi_int,
-      ss_adc_1      => aspic_t_v_ss_ccd_int(0),
-      ss_adc_2      => open,
+      ss_adc        => aspic_t_v_ss_ccd_int,
       sclk          => aspic_t_v_sclk_int,
       link_busy     => aspic_t_v_busy,
       data_from_adc => aspic_t_v_data

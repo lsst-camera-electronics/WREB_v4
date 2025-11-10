@@ -163,7 +163,7 @@ entity wreb_v4_cmd_interpreter is
     T1_reb_gr3       : in    std_logic_vector(15 downto 0);
     T1_reb_gr3_error : in    std_logic;
     -- ASPIC temp and voltage monitor
-    aspic_t_v_data    : in    array432;
+    aspic_t_v_data    : in    Slv16Array(7 downto 0);
     aspic_t_v_busy    : in    std_logic;
     aspic_t_v_start_r : out   std_logic;
     -- CCD temperature
@@ -2178,25 +2178,25 @@ begin
       when aspic_t_v_read_t_top_state =>
 
         next_state     <= wait_end_cmd;
-        next_regDataRd <= aspic_t_v_data(0);
+        next_regDataRd <= x"0000" & aspic_t_v_data(0);
         next_regAck    <= '1';
 
       when aspic_t_v_read_t_bot_state =>
 
         next_state     <= wait_end_cmd;
-        next_regDataRd <= aspic_t_v_data(1);
+        next_regDataRd <= x"0000" & aspic_t_v_data(1);
         next_regAck    <= '1';
 
       when aspic_t_v_read_2_5_state =>
 
         next_state     <= wait_end_cmd;
-        next_regDataRd <= aspic_t_v_data(2);
+        next_regDataRd <= x"0000" & aspic_t_v_data(2);
         next_regAck    <= '1';
 
       when aspic_t_v_read_5_state =>
 
         next_state     <= wait_end_cmd;
-        next_regDataRd <= aspic_t_v_data(3);
+        next_regDataRd <= x"0000" & aspic_t_v_data(3);
         next_regAck    <= '1';
 
       ---------------------- CCD Temperature sensor --------------------------
