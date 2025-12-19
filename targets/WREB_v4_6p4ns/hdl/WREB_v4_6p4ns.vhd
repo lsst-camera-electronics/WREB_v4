@@ -10,7 +10,7 @@ use lsst_reb.reb_config_pkg.all;
 library common;
 use common.WREB_v4_pkg.all;
 
-entity WREB_v4 is
+entity WREB_v4_6p4ns is
   generic (
     BUILD_INFO_G : BuildInfoType
   );
@@ -161,13 +161,13 @@ entity WREB_v4 is
     -- DREB serial number
     reb_sn_onewire : inout std_logic
   );
-end entity WREB_v4;
+end entity WREB_v4_6p4ns;
 
-architecture Behavioral of WREB_v4 is
+architecture Behavioral of WREB_v4_6p4ns is
 
   constant TARGET_CONFIG : RebConfigType := (
     numSequencers => 1,
-    sysClkPer     => 10.0E-9,
+    sysClkPer     => 6.4E-9,
     gdAddr        => x"0",
     odAddr        => x"5",
     rdAddr        => x"1",

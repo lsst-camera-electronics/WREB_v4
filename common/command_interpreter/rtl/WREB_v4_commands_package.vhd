@@ -3,6 +3,8 @@ use IEEE.STD_LOGIC_1164.all;
 
 package WREB_v4_commands_package is
 
+  constant REG_SCHEMA : std_logic_vector(31 downto 0) := x"00000000";
+
   -- Base Register Set
   constant read_schema_cmd              : std_logic_vector(23 downto 0) := x"000000";
   constant read_hdl_version_cmd         : std_logic_vector(23 downto 0) := x"000001";
