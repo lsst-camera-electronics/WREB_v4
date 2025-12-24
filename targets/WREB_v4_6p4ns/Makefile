@@ -17,10 +17,11 @@
 # -- 400A Version that fixes reset to not cause CCS to power down sensors or open bias switch.
 # -- 400B Nominally same as version 400A, but refactored to use new build system and modern Vivado
 # -- 400C Update to support 6.4ns and 10ns system clocks
+# -- 400D Fixed bug in ASPIC SPI connection
 # -------------------------------------------------------------------------------
 
 # Define Firmware Version Number
-export PRJ_VERSION = 0x113B400C
+export PRJ_VERSION = 0x113B400D
 
 export GIT_BYPASS=0
 export OVERRIDE_SUBMODULE_LOCKS=0

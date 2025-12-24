@@ -524,10 +524,10 @@ begin
   end generate sequencer_connection;
 
   ASPIC_nap_ccd       <= aspic_nap_mode_ccd; -- nap mode activated =1
-  ASPIC_spi_reset_ccd <= ASPIC_spi_reset_int;
+  ASPIC_spi_reset_ccd <= not ASPIC_spi_reset_int;
   ASPIC_spi_miso_ccd  <= (ASPIC_spi_miso_t_ccd and ASPIC_ss_t_ccd_int) or (ASPIC_spi_miso_b_ccd and ASPIC_ss_b_ccd_int);
-  ASPIC_ss_t_ccd      <= ASPIC_ss_t_ccd_int;
-  ASPIC_ss_b_ccd      <= ASPIC_ss_b_ccd_int;
+  ASPIC_ss_t_ccd      <= not ASPIC_ss_t_ccd_int;
+  ASPIC_ss_b_ccd      <= not ASPIC_ss_b_ccd_int;
 
   ------------ assignment for test ------------
   gpio_0_int   <= sequencer_outputs(0).pattern_reset;
