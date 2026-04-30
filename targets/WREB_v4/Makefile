@@ -18,10 +18,11 @@
 # -- 400B Nominally same as version 400A, but refactored to use new build system and modern Vivado
 # -- 400C Update to support 6.4ns and 10ns system clocks
 # -- 400D Fixed bug in ASPIC SPI connection
+# -- 400E Sequencer register interface refactor (lsst_reb 2feb76c)
 # -------------------------------------------------------------------------------
 
 # Define Firmware Version Number
-export PRJ_VERSION = 0x113B400D
+export PRJ_VERSION = 0x113B400E
 
 export GIT_BYPASS=0
 export OVERRIDE_SUBMODULE_LOCKS=0
@@ -41,4 +42,5 @@ export PRJ_PART = XC7K160TFFG676-1
 
 # Use top level makefile
 include ../../submodules/ruckus/system_vivado.mk
+include ../check_logs.mk
 
