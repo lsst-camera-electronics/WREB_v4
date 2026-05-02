@@ -13,6 +13,33 @@ and Vivado.
 
 Both targets use the same RTL and produce identical register-level behaviour.
 
+## Target configuration
+
+Both targets instantiate the same `WREB_v4_base` entity, parameterised by a
+`RebConfigType` record (defined in
+`submodules/lsst_reb/reb_config/rtl/reb_config_pkg.vhd`).
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `numSequencers` | 1 | Number of sequencer instances |
+| `sysClkPer` | real | System clock period (seconds) |
+| `gdAddr` | 4-bit | Guard drain DAC channel address |
+| `odAddr` | 4-bit | Output drain DAC channel address |
+| `rdAddr` | 4-bit | Reset drain DAC channel address |
+| `gdThresh` | integer×3 | Guard drain threshold per sensor |
+| `odThresh` | integer×3 | Output drain threshold per sensor |
+| `rdThresh` | integer×3 | Reset drain threshold per sensor |
+| `reserved_1` | 32-bit | DAQ index for location-limited targets |
+| `reserved_2` | 32-bit | Reserved |
+| `reserved_3` | 32-bit | Reserved |
+
+The single sequencer drives one wavefront sensor.
+
+Both WREB targets use the same configuration values: `gdAddr=0x0`,
+`odAddr=0x5`, `rdAddr=0x1`, `gdThresh=(1138,0,0)`, `odThresh=(2275,0,0)`,
+`rdThresh=(1632,0,0)`. Elements 1 and 2 are zero because the WREB has only
+one active sensor.
+
 ## Repository layout
 
 | Path | Contents |
